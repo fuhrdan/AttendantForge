@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(AttendantForge VERSION 0.5.0 LANGUAGES C)
+project(AttendantForge VERSION 0.6.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -9,6 +9,7 @@ add_library(attendantforge_core
     src/attendantforge.c
     src/zip_analyzer.c
     src/pdf_analyzer.c
+    src/policy.c
 )
 target_include_directories(attendantforge_core PUBLIC include PRIVATE src)
 
@@ -19,5 +20,6 @@ include(CTest)
 if(BUILD_TESTING)
     add_executable(attendantforge_tests tests/test_main.c)
     target_link_libraries(attendantforge_tests PRIVATE attendantforge_core)
+    target_include_directories(attendantforge_tests PRIVATE src)
     add_test(NAME attendantforge_tests COMMAND attendantforge_tests)
 endif()

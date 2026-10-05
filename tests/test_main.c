@@ -1,4 +1,5 @@
 #include "attendantforge.h"
+#include "policy.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -98,6 +99,33 @@ static int write_broken_reference_pdf(const char *path)
     return 0;
 }
 
+
+static int write_xref_stream_pdf(const char *path)
+{
+    long xref_object_offset;
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) return -1;
+    fputs("%PDF-1.7\n", fp);
+    fputs("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n", fp);
+    fputs("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n", fp);
+    fputs("3 0 obj\n<< /Type /ObjStm /N 1 /First 4 /Length 4 >>\nstream\nABCD\nendstream\nendobj\n", fp);
+    xref_object_offset = ftell(fp);
+    fputs("4 0 obj\n<< /Type /XRef /Size 5 /W [1 2 1] /Length 4 >>\nstream\nABCD\nendstream\nendobj\n", fp);
+    fputs("startxref\n", fp);
+    fprintf(fp, "%ld\n%%%%EOF\n", xref_object_offset);
+    fclose(fp);
+    return 0;
+}
+
+static int write_policy(const char *path)
+{
+    FILE *fp = fopen(path, "w");
+    if (fp == NULL) return -1;
+    fputs("profile=upload-server\nwarn_score=40\nblock_score=65\nstrict=false\n", fp);
+    fclose(fp);
+    return 0;
+}
+
 int main(void)
 {
     const unsigned char zip_header[] = {'P','K',3,4,0};
@@ -105,6 +133,8 @@ int main(void)
     const unsigned char unknown[] = {'N','O','P','E'};
     const unsigned char nested_sig[] = {'P','K',3,4};
     AfReport report;
+    AfPolicy policy;
+    char policy_error[256] = {0};
 
     assert(af_detect_type(zip_header, sizeof(zip_header)) == AF_TYPE_ZIP);
     assert(af_detect_type(pdf_header, sizeof(pdf_header)) == AF_TYPE_PDF);
@@ -175,6 +205,23 @@ int main(void)
     assert(report.score >= 5);
     remove("af_broken_ref.pdf");
 
-    puts("All AttendantForge v0.5 tests passed.");
+    assert(write_xref_stream_pdf("af_xref_stream.pdf") == 0);
+    assert(af_scan_file("af_xref_stream.pdf", &report) == 0);
+    assert(report.pdf.xref_stream_count >= 1);
+    assert(report.pdf.object_stream_count >= 1);
+    assert(report.pdf.startxref_points_to_xref_stream == 1);
+    remove("af_xref_stream.pdf");
+
+    af_policy_defaults(&policy);
+    assert(strcmp(policy.profile, "desktop") == 0);
+    assert(af_policy_apply_profile(&policy, "high-security", policy_error, sizeof(policy_error)) == 0);
+    assert(policy.warn_score == 30 && policy.block_score == 60 && policy.strict == 1);
+    assert(write_policy("af_policy.conf") == 0);
+    assert(af_policy_load_file(&policy, "af_policy.conf", policy_error, sizeof(policy_error)) == 0);
+    assert(strcmp(policy.profile, "upload-server") == 0);
+    assert(policy.warn_score == 40 && policy.block_score == 65);
+    remove("af_policy.conf");
+
+    puts("All AttendantForge v0.6 tests passed.");
     return 0;
 }

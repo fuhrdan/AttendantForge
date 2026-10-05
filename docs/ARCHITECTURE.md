@@ -1,6 +1,7 @@
 # Architecture
 
-AttendantForge separates **format recognition**, **bounded static analysis**, and **risk scoring** so additional formats can be added without changing the command-line contract.
+AttendantForge separates **format recognition**, **bounded static analysis**,
+**risk scoring**, and **deployment policy**.
 
 ```text
                  untrusted file
@@ -13,12 +14,13 @@ AttendantForge separates **format recognition**, **bounded static analysis**, an
              v                   v
           ZIP analyzer        PDF analyzer
              |                   |
-             |                   +-- object/stream inventory
-             |                   +-- filters
-             |                   +-- image dimensions
-             |                   +-- embedded files
-             |                   +-- structural depth
-             |                   +-- references/xref/EOF signals
+             |                   +-- objects / streams
+             |                   +-- filters / images
+             |                   +-- references
+             |                   +-- classic xref
+             |                   +-- xref streams
+             |                   +-- object streams
+             |                   +-- incremental updates
              |
              +-- central directory
              +-- expansion ratios
@@ -28,38 +30,64 @@ AttendantForge separates **format recognition**, **bounded static analysis**, an
              +---------+---------+
                        |
                        v
-                common risk model
+                 0..100 risk score
                        |
-                 LOW / MEDIUM /
-                 HIGH / CRITICAL
+                       v
+              +-------------------+
+              | policy layer      |
+              | profile/config/CLI|
+              +---------+---------+
+                        |
+                 ALLOW/WARN/BLOCK
 ```
 
 ## Bounded-reader principle
 
-The scanner should never casually perform the expensive operation it is warning about.
+The scanner should not casually perform the expensive operation it is warning
+about. ZIP analysis relies on central-directory metadata and bounded signature
+inspection of stored nested members. PDF analysis reads at most a 64 MiB prefix,
+does not render pages, and does not inflate stream payloads.
 
-ZIP analysis therefore relies on central-directory metadata and only performs bounded signature inspection of stored nested members. PDF analysis does not inflate streams or render pages. It scans at most the first 64 MiB and skips stream payload bytes while inventorying surrounding structure.
+## PDF v0.6 model
 
-## PDF v0.5 model
+The PDF analyzer inventories resource-cost and structural signals including:
 
-The PDF analyzer estimates pressure from five classes of signals:
+1. object and stream cardinality;
+2. declared stream-length amplification;
+3. image dimensions and estimated RGBA allocation;
+4. filter-chain complexity;
+5. dictionary/array depth and embedded-file markers;
+6. indirect references and bounded unresolved-reference checks;
+7. classic xref sections;
+8. `/Type /XRef` xref streams;
+9. `/Type /ObjStm` object streams;
+10. `/XRefStm` hybrid-reference markers and `/Prev` incremental-update chains.
 
-1. **Cardinality** — object and stream counts.
-2. **Amplification declarations** — numeric `/Length` declarations relative to stored file size.
-3. **Rendering allocation** — declared image width × height, with a simple 4-byte-per-pixel memory estimate.
-4. **Decoder complexity** — filter declarations and chain length.
-5. **Structural complexity** — dictionary/array depth, embedded files, and structural marker consistency.
-
-These signals are intentionally conservative heuristics. v0.5 also inventories indirect references, estimates unresolved references within the bounded scan, validates that `startxref` is in range, and—when classic xref tables are present—checks whether the offset points at one. These checks are suitable for preflight decisions such as allow, warn, quarantine, or submit to a separately constrained sandbox; they are not a full PDF conformance proof.
+`startxref` is considered structurally recognized when it points either to a
+classic `xref` table or to an indirect object identified as an xref stream.
+This is still a preflight heuristic, not a full PDF conformance checker.
 
 ## Policy layer
 
-The CLI maps the common risk score onto an explicit pipeline decision:
+The risk engine is intentionally independent of deployment thresholds:
 
 ```text
-static analyzer -> 0..100 score -> policy thresholds -> ALLOW / WARN / BLOCK
-                                            |             |      |
-                                            +---------- exit 0 / 10 / 20
+static analyzers -> 0..100 score -> policy -> ALLOW / WARN / BLOCK
+                                      |
+                        defaults/profile/file/CLI
 ```
 
-The policy layer is intentionally separate from format parsing so callers can tighten thresholds without changing the ZIP/PDF heuristics.
+The ordering is deterministic:
+
+```text
+built-in defaults
+      ↓
+named profile
+      ↓
+policy file
+      ↓
+explicit CLI overrides
+```
+
+This lets one binary serve desktop inspection, public upload services, and
+higher-security environments without rewriting format heuristics.

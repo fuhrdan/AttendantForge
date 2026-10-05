@@ -12,18 +12,19 @@
 ## v0.4 — PDF structural analyzer
 - bounded PDF object/stream/filter/image/resource-cost analysis
 
-## v0.5 — Pipeline integration (current)
-- JSON output
-- stable policy exit codes
-- configurable warning/block thresholds
-- strict mode
-- indirect-reference inventory
-- unresolved-reference heuristic
-- startxref offset / classic-xref validation
+## v0.5 — Pipeline integration
+- JSON output, stable exit codes, configurable thresholds, strict mode
+- indirect-reference inventory and classic `startxref` validation
 
-## v0.6+
-- policy configuration files
-- richer PDF xref-stream/object-stream awareness
-- optional OS-constrained dynamic probe
-- additional container/image formats
-- integration examples for web upload/download gateways
+## v0.6 — Policy + modern PDF structures (current)
+- external policy files
+- `desktop`, `upload-server`, and `high-security` profiles
+- xref-stream and object-stream awareness
+- incremental-update inventory
+- upload-gateway integration example
+
+## v0.7+
+- optional OS-constrained dynamic probe with hard CPU/RAM/time quotas
+- additional archive/container/image formats
+- policy controls for format allowlists and per-format limits
+- richer metrics/telemetry output for fleet deployment

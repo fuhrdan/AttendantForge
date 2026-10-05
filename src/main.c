@@ -1,4 +1,5 @@
 #include "attendantforge.h"
+#include "policy.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -13,11 +14,16 @@
 
 typedef struct
 {
+    int json;
+    int strict_set;
+    int warn_set;
+    int block_set;
     unsigned int warn_score;
     unsigned int block_score;
-    int json;
-    int strict;
-} AfCliPolicy;
+    const char *profile;
+    const char *policy_file;
+    const char *path;
+} AfCliOptions;
 
 static void print_usage(const char *exe)
 {
@@ -25,11 +31,14 @@ static void print_usage(const char *exe)
     printf("Usage: %s scan [options] <file>\n", exe);
     printf("       %s --version\n\n", exe);
     printf("Options:\n");
-    printf("  --json             Emit machine-readable JSON.\n");
-    printf("  --strict           Default block threshold becomes 60 (HIGH).\n");
-    printf("  --warn-score N     Warning threshold, 0-100 (default 60).\n");
-    printf("  --block-score N    Blocking threshold, 0-100 (default 80, strict 60).\n");
-    printf("  --help             Show this help.\n\n");
+    printf("  --json                 Emit machine-readable JSON.\n");
+    printf("  --profile NAME         desktop, upload-server, or high-security.\n");
+    printf("  --policy FILE          Load key=value policy configuration.\n");
+    printf("  --strict               Enforce a block threshold no higher than 60.\n");
+    printf("  --warn-score N         Warning threshold, 0-100.\n");
+    printf("  --block-score N        Blocking threshold, 0-100.\n");
+    printf("  --help                 Show this help.\n\n");
+    printf("Precedence: defaults -> profile -> policy file -> explicit CLI overrides.\n");
     printf("Exit codes: 0 allow, 10 warn, 20 block, 2 usage, 3 scan error.\n");
 }
 
@@ -49,14 +58,14 @@ static int parse_score(const char *text, unsigned int *value)
     return 1;
 }
 
-static const char *decision_name(unsigned int score, const AfCliPolicy *policy)
+static const char *decision_name(unsigned int score, const AfPolicy *policy)
 {
     if (score >= policy->block_score) return "BLOCK";
     if (score >= policy->warn_score) return "WARN";
     return "ALLOW";
 }
 
-static int decision_exit_code(unsigned int score, const AfCliPolicy *policy)
+static int decision_exit_code(unsigned int score, const AfPolicy *policy)
 {
     if (score >= policy->block_score) return AF_EXIT_BLOCK;
     if (score >= policy->warn_score) return AF_EXIT_WARN;
@@ -87,7 +96,7 @@ static void json_string(const char *value)
     putchar('"');
 }
 
-static void print_json_report(const AfReport *report, const AfCliPolicy *policy)
+static void print_json_report(const AfReport *report, const AfPolicy *policy)
 {
     printf("{\n");
     printf("  \"tool\": \"AttendantForge\",\n  \"version\": \"%s\",\n", AF_VERSION);
@@ -95,7 +104,9 @@ static void print_json_report(const AfReport *report, const AfCliPolicy *policy)
     printf("  \"type\": \"%s\",\n", af_type_name(report->type));
     printf("  \"file_size_bytes\": %llu,\n", (unsigned long long)report->file_size);
     printf("  \"risk\": {\"score\": %u, \"level\": \"%s\"},\n", report->score, af_risk_name(report->level));
-    printf("  \"policy\": {\"warn_score\": %u, \"block_score\": %u, \"strict\": %s, \"decision\": \"%s\"},\n",
+    printf("  \"policy\": {\"profile\": "); json_string(policy->profile);
+    printf(", \"policy_file\": "); json_string(policy->policy_file);
+    printf(", \"warn_score\": %u, \"block_score\": %u, \"strict\": %s, \"decision\": \"%s\"},\n",
            policy->warn_score, policy->block_score, policy->strict ? "true" : "false", decision_name(report->score, policy));
 
     if (report->type == AF_TYPE_ZIP)
@@ -132,11 +143,16 @@ static void print_json_report(const AfReport *report, const AfCliPolicy *policy)
         printf("    \"estimated_image_memory_bytes\": %llu,\n", (unsigned long long)report->pdf.estimated_image_memory);
         printf("    \"maximum_structure_depth\": %u,\n", report->pdf.maximum_structure_depth);
         printf("    \"xref_section_count\": %u,\n", report->pdf.xref_section_count);
+        printf("    \"xref_stream_count\": %llu,\n", (unsigned long long)report->pdf.xref_stream_count);
+        printf("    \"object_stream_count\": %llu,\n", (unsigned long long)report->pdf.object_stream_count);
+        printf("    \"xref_stream_reference_count\": %llu,\n", (unsigned long long)report->pdf.xref_stream_reference_count);
+        printf("    \"incremental_update_count\": %llu,\n", (unsigned long long)report->pdf.incremental_update_count);
         printf("    \"indirect_reference_count\": %llu,\n", (unsigned long long)report->pdf.indirect_reference_count);
         printf("    \"unresolved_reference_count\": %llu,\n", (unsigned long long)report->pdf.unresolved_reference_count);
         printf("    \"startxref_offset\": %llu,\n", (unsigned long long)report->pdf.startxref_offset);
         printf("    \"startxref_offset_valid\": %s,\n", report->pdf.startxref_offset_valid ? "true" : "false");
         printf("    \"startxref_points_to_xref\": %s,\n", report->pdf.startxref_points_to_xref ? "true" : "false");
+        printf("    \"startxref_points_to_xref_stream\": %s,\n", report->pdf.startxref_points_to_xref_stream ? "true" : "false");
         printf("    \"eof_marker_present\": %s,\n", report->pdf.eof_marker_present ? "true" : "false");
         printf("    \"analysis_truncated\": %s,\n", report->pdf.analysis_truncated ? "true" : "false");
         printf("    \"recommended_memory_budget_bytes\": %llu\n", (unsigned long long)report->pdf.recommended_memory_budget);
@@ -145,7 +161,7 @@ static void print_json_report(const AfReport *report, const AfCliPolicy *policy)
     printf("  \"notes\": "); json_string(report->notes[0] ? report->notes : "None"); printf("\n}\n");
 }
 
-static void print_text_report(const AfReport *report, const AfCliPolicy *policy)
+static void print_text_report(const AfReport *report, const AfPolicy *policy)
 {
     printf("AttendantForge v%s\n\n", AF_VERSION);
     printf("File:        %s\n", report->path);
@@ -176,29 +192,69 @@ static void print_text_report(const AfReport *report, const AfCliPolicy *policy)
         printf("Image objects:               %llu\n", (unsigned long long)report->pdf.image_count);
         printf("Declared stream/file ratio:  %.2fx\n", report->pdf.declared_stream_ratio);
         printf("Estimated image memory:      %.2f MiB\n", to_mib(report->pdf.estimated_image_memory));
+        printf("Classic xref sections:       %u\n", report->pdf.xref_section_count);
+        printf("Xref streams:                %llu\n", (unsigned long long)report->pdf.xref_stream_count);
+        printf("Object streams:              %llu\n", (unsigned long long)report->pdf.object_stream_count);
+        printf("Incremental update links:    %llu\n", (unsigned long long)report->pdf.incremental_update_count);
         printf("Indirect references:         %llu\n", (unsigned long long)report->pdf.indirect_reference_count);
         printf("Unresolved references:       %llu\n", (unsigned long long)report->pdf.unresolved_reference_count);
         printf("startxref offset:             %llu\n", (unsigned long long)report->pdf.startxref_offset);
-        printf("startxref valid:              %s\n", report->pdf.startxref_offset_valid ? "YES" : "NO");
-        printf("startxref -> xref:            %s\n", report->pdf.startxref_points_to_xref ? "YES" : "NO");
+        printf("startxref recognized:         %s\n", (report->pdf.startxref_points_to_xref || report->pdf.startxref_points_to_xref_stream) ? "YES" : "NO");
         printf("Recommended memory budget:   %.2f MiB\n", to_mib(report->pdf.recommended_memory_budget));
     }
 
     printf("\nRisk score:  %u / 100\n", report->score);
     printf("Risk level:  %s\n", af_risk_name(report->level));
-    printf("Policy:      %s (warn >= %u, block >= %u%s)\n", decision_name(report->score, policy),
-           policy->warn_score, policy->block_score, policy->strict ? ", strict" : "");
+    printf("Policy:      %s (profile %s, warn >= %u, block >= %u%s)\n", decision_name(report->score, policy),
+           policy->profile, policy->warn_score, policy->block_score, policy->strict ? ", strict" : "");
+    if (policy->policy_file[0] != '\0') printf("Policy file: %s\n", policy->policy_file);
     printf("Notes:       %s\n", report->notes[0] ? report->notes : "None");
+}
+
+static int parse_cli(int argc, char **argv, AfCliOptions *opts)
+{
+    int i;
+    memset(opts, 0, sizeof(*opts));
+    for (i = 2; i < argc; i++)
+    {
+        if (strcmp(argv[i], "--json") == 0) opts->json = 1;
+        else if (strcmp(argv[i], "--strict") == 0) opts->strict_set = 1;
+        else if (strcmp(argv[i], "--profile") == 0)
+        {
+            if (++i >= argc) return 0;
+            opts->profile = argv[i];
+        }
+        else if (strcmp(argv[i], "--policy") == 0)
+        {
+            if (++i >= argc) return 0;
+            opts->policy_file = argv[i];
+        }
+        else if (strcmp(argv[i], "--warn-score") == 0)
+        {
+            if (++i >= argc || !parse_score(argv[i], &opts->warn_score)) return 0;
+            opts->warn_set = 1;
+        }
+        else if (strcmp(argv[i], "--block-score") == 0)
+        {
+            if (++i >= argc || !parse_score(argv[i], &opts->block_score)) return 0;
+            opts->block_set = 1;
+        }
+        else if (strcmp(argv[i], "--help") == 0) return 2;
+        else if (argv[i][0] == '-') return 0;
+        else if (opts->path == NULL) opts->path = argv[i];
+        else return 0;
+    }
+    return opts->path != NULL ? 1 : 0;
 }
 
 int main(int argc, char **argv)
 {
     AfReport report;
-    AfCliPolicy policy = {60u, 80u, 0, 0};
-    const char *path = NULL;
-    int explicit_block = 0;
+    AfPolicy policy;
+    AfCliOptions opts;
+    char error[256] = {0};
+    int parsed;
     int rc;
-    int i;
 
     if (argc == 2 && strcmp(argv[1], "--version") == 0)
     {
@@ -216,44 +272,43 @@ int main(int argc, char **argv)
         return AF_EXIT_USAGE;
     }
 
-    for (i = 2; i < argc; i++)
-    {
-        if (strcmp(argv[i], "--json") == 0) policy.json = 1;
-        else if (strcmp(argv[i], "--strict") == 0) policy.strict = 1;
-        else if (strcmp(argv[i], "--warn-score") == 0)
-        {
-            if (++i >= argc || !parse_score(argv[i], &policy.warn_score)) { fprintf(stderr, "Invalid --warn-score.\n"); return AF_EXIT_USAGE; }
-        }
-        else if (strcmp(argv[i], "--block-score") == 0)
-        {
-            if (++i >= argc || !parse_score(argv[i], &policy.block_score)) { fprintf(stderr, "Invalid --block-score.\n"); return AF_EXIT_USAGE; }
-            explicit_block = 1;
-        }
-        else if (argv[i][0] == '-')
-        {
-            fprintf(stderr, "Unknown option: %s\n", argv[i]);
-            return AF_EXIT_USAGE;
-        }
-        else if (path == NULL) path = argv[i];
-        else { fprintf(stderr, "Only one input file may be scanned at a time.\n"); return AF_EXIT_USAGE; }
-    }
+    parsed = parse_cli(argc, argv, &opts);
+    if (parsed == 2) { print_usage(argv[0]); return AF_EXIT_ALLOW; }
+    if (parsed != 1) { fprintf(stderr, "Invalid scan options.\n"); print_usage(argv[0]); return AF_EXIT_USAGE; }
 
-    if (path == NULL) { print_usage(argv[0]); return AF_EXIT_USAGE; }
-    if (policy.strict && !explicit_block) policy.block_score = 60u;
-    if (policy.warn_score > policy.block_score)
+    af_policy_defaults(&policy);
+    if (opts.profile != NULL && af_policy_apply_profile(&policy, opts.profile, error, sizeof(error)) != 0)
     {
-        fprintf(stderr, "warn-score must be <= block-score.\n");
+        fprintf(stderr, "Policy error: %s\n", error);
+        return AF_EXIT_USAGE;
+    }
+    if (opts.policy_file != NULL && af_policy_load_file(&policy, opts.policy_file, error, sizeof(error)) != 0)
+    {
+        fprintf(stderr, "Policy error: %s\n", error);
+        return AF_EXIT_USAGE;
+    }
+    if (opts.strict_set)
+    {
+        policy.strict = 1;
+        if (!opts.block_set && policy.block_score > 60u) policy.block_score = 60u;
+    }
+    if (opts.warn_set) policy.warn_score = opts.warn_score;
+    if (opts.block_set) policy.block_score = opts.block_score;
+    if (policy.strict && !opts.block_set && policy.block_score > 60u) policy.block_score = 60u;
+    if (af_policy_validate(&policy, error, sizeof(error)) != 0)
+    {
+        fprintf(stderr, "Policy error: %s\n", error);
         return AF_EXIT_USAGE;
     }
 
-    rc = af_scan_file(path, &report);
+    rc = af_scan_file(opts.path, &report);
     if (rc != 0)
     {
-        fprintf(stderr, "Unable to scan '%s' (error %d).\n", path, rc);
+        fprintf(stderr, "Unable to scan '%s' (error %d).\n", opts.path, rc);
         return AF_EXIT_SCAN_ERROR;
     }
 
-    if (policy.json) print_json_report(&report, &policy);
+    if (opts.json) print_json_report(&report, &policy);
     else print_text_report(&report, &policy);
     return decision_exit_code(report.score, &policy);
 }

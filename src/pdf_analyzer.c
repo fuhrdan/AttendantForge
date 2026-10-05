@@ -212,6 +212,21 @@ static int parse_startxref_value(const unsigned char *data, size_t len, size_t p
     return parse_uint_at(data, len, &p, value);
 }
 
+static int object_at_offset_is_xref_stream(const unsigned char *data, size_t len, size_t offset)
+{
+    size_t end;
+    size_t i;
+    if (offset >= len || !looks_like_obj(data, len, offset)) return 0;
+    end = offset + 4096u;
+    if (end > len) end = len;
+    for (i = offset; i + 11u <= end; i++)
+    {
+        if (memcmp(data + i, "/Type /XRef", 11u) == 0) return 1;
+        if (i + 6u <= end && memcmp(data + i, "stream", 6u) == 0) break;
+    }
+    return 0;
+}
+
 int af_analyze_pdf(FILE *fp, uint64_t file_size, AfPdfMetrics *metrics, char *notes, size_t notes_size)
 {
     size_t read_size;
@@ -347,6 +362,8 @@ int af_analyze_pdf(FILE *fp, uint64_t file_size, AfPdfMetrics *metrics, char *no
                 if (offset < file_size) metrics->startxref_offset_valid = 1;
                 if (offset + 4u <= got && memcmp(data + (size_t)offset, "xref", 4) == 0)
                     metrics->startxref_points_to_xref = 1;
+                else if (offset < got && object_at_offset_is_xref_stream(data, got, (size_t)offset))
+                    metrics->startxref_points_to_xref_stream = 1;
             }
             i += 8;
             continue;
@@ -370,6 +387,22 @@ int af_analyze_pdf(FILE *fp, uint64_t file_size, AfPdfMetrics *metrics, char *no
         if (i + 13 <= got && memcmp(data + i, "/EmbeddedFile", 13) == 0)
         {
             metrics->embedded_file_count++;
+        }
+        if (i + 11 <= got && memcmp(data + i, "/Type /XRef", 11) == 0)
+        {
+            metrics->xref_stream_count++;
+        }
+        if (i + 13 <= got && memcmp(data + i, "/Type /ObjStm", 13) == 0)
+        {
+            metrics->object_stream_count++;
+        }
+        if (i + 8 <= got && memcmp(data + i, "/XRefStm", 8) == 0)
+        {
+            metrics->xref_stream_reference_count++;
+        }
+        if (i + 5 <= got && memcmp(data + i, "/Prev", 5) == 0)
+        {
+            metrics->incremental_update_count++;
         }
         if (i + 7 <= got && memcmp(data + i, "/Length", 7) == 0)
         {
@@ -420,8 +453,8 @@ int af_analyze_pdf(FILE *fp, uint64_t file_size, AfPdfMetrics *metrics, char *no
 
     if (metrics->startxref_present && !metrics->startxref_offset_valid)
         append_note(notes, notes_size, "startxref offset is outside the file. ");
-    else if (metrics->startxref_present && !metrics->startxref_points_to_xref)
-        append_note(notes, notes_size, "startxref does not point to a classic xref table in the bounded scan. ");
+    else if (metrics->startxref_present && !metrics->startxref_points_to_xref && !metrics->startxref_points_to_xref_stream)
+        append_note(notes, notes_size, "startxref does not point to a recognized classic xref table or xref-stream object in the bounded scan. ");
     if (metrics->unresolved_reference_count > 0)
         append_note(notes, notes_size, "Unresolved indirect object references were observed. ");
     append_note(notes, notes_size, "PDF structure inspected statically without decoding streams or rendering pages. ");
@@ -467,7 +500,16 @@ unsigned int af_score_pdf(const AfPdfMetrics *metrics, uint64_t file_size, char 
 
     if (!metrics->startxref_present) { score += 5; append_note(notes, notes_size, "startxref marker was not observed. "); }
     else if (!metrics->startxref_offset_valid) { score += 12; append_note(notes, notes_size, "startxref offset is invalid. "); }
-    else if (!metrics->startxref_points_to_xref && metrics->xref_section_count > 0) { score += 8; append_note(notes, notes_size, "startxref did not resolve to an observed classic xref table. "); }
+    else if (!metrics->startxref_points_to_xref && !metrics->startxref_points_to_xref_stream &&
+             (metrics->xref_section_count > 0 || metrics->xref_stream_count > 0))
+    {
+        score += 8;
+        append_note(notes, notes_size, "startxref did not resolve to an observed xref structure. ");
+    }
+    if (metrics->object_stream_count >= 10000) { score += 12; append_note(notes, notes_size, "Very high PDF object-stream count. "); }
+    else if (metrics->object_stream_count >= 2000) { score += 6; append_note(notes, notes_size, "High PDF object-stream count. "); }
+    if (metrics->incremental_update_count >= 1000) { score += 10; append_note(notes, notes_size, "Very high incremental-update chain count. "); }
+    else if (metrics->incremental_update_count >= 100) { score += 5; append_note(notes, notes_size, "Large incremental-update chain count. "); }
     if (metrics->unresolved_reference_count >= 100) { score += 15; append_note(notes, notes_size, "Many unresolved PDF indirect references. "); }
     else if (metrics->unresolved_reference_count > 0) { score += 5; append_note(notes, notes_size, "Unresolved PDF indirect references detected. "); }
     if (!metrics->eof_marker_present) { score += 5; append_note(notes, notes_size, "PDF EOF marker was not observed. "); }

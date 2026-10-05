@@ -1,0 +1,8 @@
+# AttendantForge v0.6 policy file
+# Format: key=value. Blank lines and lines beginning with # or ; are ignored.
+# Precedence: defaults -> CLI --profile -> this file -> explicit CLI score/strict flags.
+
+profile=upload-server
+warn_score=45
+block_score=70
+strict=false
