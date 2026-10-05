@@ -105,21 +105,21 @@ AttendantForge's long-term model is to score **estimated resource pressure**, no
 
 ## Out of scope
 
-AttendantForge v0.3 does not:
+AttendantForge v0.4 does not:
 
 - execute embedded scripts;
-- render PDFs;
-- extract ZIP contents (v0.3 analyzes ZIP central-directory metadata only);
+- render PDFs or decode PDF stream payloads;
+- extract arbitrary ZIP contents during the static scan;
 - create archive bombs or destructive PDF samples;
 - determine whether a document contains malware;
 - guarantee that a file is safe to open.
 
-Later releases add format-aware static analysis while retaining strict resource budgets and bounded test fixtures.
+v0.4 adds bounded PDF static analysis while retaining strict resource budgets and bounded test fixtures. Later releases can add richer reference-graph validation and an optional OS-constrained dynamic probe.
 
 
-## v0.3 defensive checks
+## Current defensive checks
 
-AttendantForge v0.3 converts the threat model into static checks without expanding arbitrary payloads:
+AttendantForge v0.4 converts the threat model into static checks without expanding arbitrary payloads:
 
 - declared compressed vs. uncompressed bytes and amplification ratio;
 - entry-count and largest-entry pressure;
@@ -131,3 +131,20 @@ AttendantForge v0.3 converts the threat model into static checks without expandi
 - recommended disk and memory budgets before extraction.
 
 These checks do not prove a file is safe. They provide an inexpensive preflight risk estimate so a caller can allow, warn, quarantine, or pass the file to a separately resource-constrained sandbox.
+
+
+## v0.4 PDF checks
+
+The PDF analyzer adds a bounded preflight pass that does not render the document or inflate stream data. It inventories:
+
+- indirect-object and stream counts;
+- filter declarations and `/FlateDecode` use;
+- maximum observed filter-chain length;
+- numeric `/Length` declarations relative to stored file size;
+- declared image dimensions and aggregate pixel workload;
+- a simple RGBA memory-pressure estimate;
+- embedded-file markers;
+- dictionary/array nesting depth;
+- xref, `startxref`, and EOF markers.
+
+The resulting score estimates **resource pressure**, not malicious intent. A legitimate engineering drawing or image-heavy report can be expensive, while a maliciously constructed file may exploit implementation details not visible to static heuristics. The score is therefore intended to drive a policy decision, not replace a hardened parser or sandbox.

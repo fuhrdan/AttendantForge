@@ -24,8 +24,7 @@ static void print_report(const AfReport *report)
 
     if (report->type == AF_TYPE_ZIP)
     {
-        printf("\nZIP resource metadata\n");
-        printf("---------------------\n");
+        printf("\nZIP resource metadata\n---------------------\n");
         printf("Entries:                    %llu\n", (unsigned long long)report->zip.entry_count);
         printf("Compressed payload:         %.2f MiB\n", to_mib(report->zip.total_compressed_size));
         printf("Declared expanded data:     %.2f MiB\n", to_mib(report->zip.total_uncompressed_size));
@@ -40,19 +39,34 @@ static void print_report(const AfReport *report)
         printf("Recommended disk budget:    %.2f MiB\n", to_mib(report->zip.recommended_disk_budget));
         printf("Recommended memory budget:  %.2f MiB\n", to_mib(report->zip.recommended_memory_budget));
         printf("Central directory:          %s\n", report->zip.central_directory_valid ? "VALID" : "UNVERIFIED");
-        if (report->zip.zip64_detected)
-        {
-            printf("ZIP64:                      %s\n", report->zip.zip64_valid ? "VALIDATED" : "DETECTED / UNVERIFIED");
-        }
+        if (report->zip.zip64_detected) printf("ZIP64:                      %s\n", report->zip.zip64_valid ? "VALIDATED" : "DETECTED / UNVERIFIED");
+    }
+    else if (report->type == AF_TYPE_PDF)
+    {
+        printf("\nPDF resource metadata\n---------------------\n");
+        printf("Objects observed:            %llu\n", (unsigned long long)report->pdf.object_count);
+        printf("Streams observed:            %llu\n", (unsigned long long)report->pdf.stream_count);
+        printf("Filter declarations:         %llu\n", (unsigned long long)report->pdf.filter_count);
+        printf("FlateDecode filters:         %llu\n", (unsigned long long)report->pdf.flate_filter_count);
+        printf("Maximum filter chain:        %u\n", report->pdf.maximum_filter_chain);
+        printf("Image objects:               %llu\n", (unsigned long long)report->pdf.image_count);
+        printf("Embedded-file objects:       %llu\n", (unsigned long long)report->pdf.embedded_file_count);
+        printf("Declared stream bytes:       %.2f MiB\n", to_mib(report->pdf.declared_stream_bytes));
+        printf("Declared stream/file ratio:  %.2fx\n", report->pdf.declared_stream_ratio);
+        printf("Total declared pixels:       %llu\n", (unsigned long long)report->pdf.total_declared_pixels);
+        printf("Largest declared image:      %llu pixels\n", (unsigned long long)report->pdf.maximum_declared_pixels);
+        printf("Estimated image memory:      %.2f MiB\n", to_mib(report->pdf.estimated_image_memory));
+        printf("Structure depth heuristic:   %u\n", report->pdf.maximum_structure_depth);
+        printf("XRef sections observed:      %u\n", report->pdf.xref_section_count);
+        printf("startxref marker:            %s\n", report->pdf.startxref_present ? "YES" : "NO");
+        printf("EOF marker:                  %s\n", report->pdf.eof_marker_present ? "YES" : "NO");
+        printf("Recommended memory budget:   %.2f MiB\n", to_mib(report->pdf.recommended_memory_budget));
+        printf("Analysis bounded/truncated:  %s\n", report->pdf.analysis_truncated ? "YES" : "NO");
     }
 
     printf("\nRisk score:  %u / 100\n", report->score);
     printf("Risk level:  %s\n", af_risk_name(report->level));
     printf("Notes:       %s\n", report->notes[0] ? report->notes : "None");
-    if (report->type == AF_TYPE_PDF)
-    {
-        printf("\nPDF deep analysis begins in v0.4.\n");
-    }
 }
 
 int main(int argc, char **argv)

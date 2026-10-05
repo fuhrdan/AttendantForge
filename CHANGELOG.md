@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Added bounded PDF static resource analysis.
+- Added PDF object/stream/filter inventory.
+- Added FlateDecode and filter-chain heuristics.
+- Added declared stream-length amplification signal.
+- Added image pixel and estimated image-memory accounting.
+- Added embedded-file, structural-depth, xref/startxref/EOF signals.
+- Added PDF-specific risk scoring and regression fixtures.
+- Preserved v0.3 ZIP/ZIP64, nesting, traversal, and budget checks.
+
 ## v0.3.0
 
 ### Added

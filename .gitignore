@@ -1,3 +1,4 @@
+build-make/
 build/
 *.o
 *.obj

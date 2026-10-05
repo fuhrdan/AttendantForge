@@ -294,7 +294,7 @@ static int inspect_stored_nested_zip(FILE *fp, uint64_t local_offset, uint64_t c
         return 0;
     }
 
-    /* v0.3 stays metadata-only: count confirmed nested ZIP signatures without decoding them. */
+    /* Metadata-only policy: confirm stored nested ZIP signatures without decoding them. */
     metrics->nested_archives_inspected++;
     metrics->nested_entries_total++;
     if (depth > metrics->maximum_nested_depth)

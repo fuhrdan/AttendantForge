@@ -1,49 +1,53 @@
-# AttendantForge Architecture — v0.3
+# Architecture
+
+AttendantForge separates **format recognition**, **bounded static analysis**, and **risk scoring** so additional formats can be added without changing the command-line contract.
 
 ```text
-Untrusted file
-     |
-     v
-+-------------------+
-| signature probe   |
-+---------+---------+
-          |
-    +-----+-----+
-    |           |
-   ZIP         PDF
-    |           |
-    v           v
-central-dir   signature only
-analyzer      (v0.4 deep probe)
-    |
-    +--> entry counts
-    +--> compressed / expanded totals
-    +--> amplification ratios
-    +--> ZIP64 metadata
-    +--> path anomalies
-    +--> nested archive candidates
-    +--> bounded stored-nested confirmation
-    |
-    v
-+-------------------+
-| shared risk model |
-+---------+---------+
-          |
-          v
- LOW / MEDIUM / HIGH / CRITICAL
+                 untrusted file
+                       |
+                       v
+                signature probe
+                       |
+             +---------+---------+
+             |                   |
+             v                   v
+          ZIP analyzer        PDF analyzer
+             |                   |
+             |                   +-- object/stream inventory
+             |                   +-- filters
+             |                   +-- image dimensions
+             |                   +-- embedded files
+             |                   +-- structural depth
+             |                   +-- xref/EOF signals
+             |
+             +-- central directory
+             +-- expansion ratios
+             +-- ZIP64 metadata
+             +-- nesting/path checks
+             |
+             +---------+---------+
+                       |
+                       v
+                common risk model
+                       |
+                 LOW / MEDIUM /
+                 HIGH / CRITICAL
 ```
 
-## Scanner invariants
+## Bounded-reader principle
 
-1. Do not extract an archive merely to decide whether it is safe to extract.
-2. Bound metadata reads and nested inspection.
-3. Treat declared sizes as claims, not guarantees.
-4. Treat overflow/inconsistent metadata as suspicious.
-5. Separate static estimates from future sandbox measurements.
-6. Do not write archive members to disk during static analysis.
+The scanner should never casually perform the expensive operation it is warning about.
 
-## v0.3 nested inspection
+ZIP analysis therefore relies on central-directory metadata and only performs bounded signature inspection of stored nested members. PDF analysis does not inflate streams or render pages. It scans at most the first 64 MiB and skips stream payload bytes while inventorying surrounding structure.
 
-All `.zip`-named entries are counted as candidates. A stored (method 0) candidate may be cheaply checked for a ZIP local-header signature because no decompression is required. Deflated/encrypted/otherwise encoded nested members are not expanded in v0.3.
+## PDF v0.4 model
 
-This is intentionally conservative: a high-confidence static warning is preferable to causing resource exhaustion inside the scanner.
+The PDF analyzer estimates pressure from five classes of signals:
+
+1. **Cardinality** — object and stream counts.
+2. **Amplification declarations** — numeric `/Length` declarations relative to stored file size.
+3. **Rendering allocation** — declared image width × height, with a simple 4-byte-per-pixel memory estimate.
+4. **Decoder complexity** — filter declarations and chain length.
+5. **Structural complexity** — dictionary/array depth, embedded files, and structural marker consistency.
+
+These signals are intentionally conservative heuristics. They are suitable for preflight decisions such as allow, warn, quarantine, or submit to a separately constrained sandbox; they are not a full PDF conformance proof.

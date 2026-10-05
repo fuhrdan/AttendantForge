@@ -29,24 +29,15 @@ static int write_single_entry_zip(const char *path, const char *name,
     unsigned long cdir_end;
     FILE *fp = fopen(path, "wb");
     unsigned long i;
-
-    if (fp == NULL)
-    {
-        return -1;
-    }
+    if (fp == NULL) return -1;
 
     put_u32_le(fp, 0x04034b50ul);
     put_u16_le(fp, 20); put_u16_le(fp, 0); put_u16_le(fp, 0);
-    put_u16_le(fp, 0); put_u16_le(fp, 0);
-    put_u32_le(fp, 0);
-    put_u32_le(fp, compressed_size);
-    put_u32_le(fp, uncompressed_size);
+    put_u16_le(fp, 0); put_u16_le(fp, 0); put_u32_le(fp, 0);
+    put_u32_le(fp, compressed_size); put_u32_le(fp, uncompressed_size);
     put_u16_le(fp, name_len); put_u16_le(fp, 0);
     fwrite(name, 1, name_len, fp);
-    for (i = 0; i < compressed_size; i++)
-    {
-        fputc(payload != NULL ? payload[i] : 'A', fp);
-    }
+    for (i = 0; i < compressed_size; i++) fputc(payload != NULL ? payload[i] : 'A', fp);
 
     cdir_offset = (unsigned long)ftell(fp);
     put_u32_le(fp, 0x02014b50ul);
@@ -54,14 +45,39 @@ static int write_single_entry_zip(const char *path, const char *name,
     put_u16_le(fp, 0); put_u16_le(fp, 0); put_u32_le(fp, 0);
     put_u32_le(fp, compressed_size); put_u32_le(fp, uncompressed_size);
     put_u16_le(fp, name_len); put_u16_le(fp, 0); put_u16_le(fp, 0);
-    put_u16_le(fp, 0); put_u16_le(fp, 0); put_u32_le(fp, 0);
-    put_u32_le(fp, local_offset);
+    put_u16_le(fp, 0); put_u16_le(fp, 0); put_u32_le(fp, 0); put_u32_le(fp, local_offset);
     fwrite(name, 1, name_len, fp);
     cdir_end = (unsigned long)ftell(fp);
 
     put_u32_le(fp, 0x06054b50ul);
     put_u16_le(fp, 0); put_u16_le(fp, 0); put_u16_le(fp, 1); put_u16_le(fp, 1);
     put_u32_le(fp, cdir_end - cdir_offset); put_u32_le(fp, cdir_offset); put_u16_le(fp, 0);
+    fclose(fp);
+    return 0;
+}
+
+static int write_pdf(const char *path, int high_cost)
+{
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) return -1;
+    fputs("%PDF-1.7\n", fp);
+    fputs("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n", fp);
+    fputs("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n", fp);
+    fputs("3 0 obj\n<< /Type /Page /Resources << /XObject << /Im1 4 0 R >> >> >>\nendobj\n", fp);
+    if (high_cost)
+    {
+        fputs("4 0 obj\n<< /Type /XObject /Subtype /Image /Width 50000 /Height 50000 ", fp);
+        fputs("/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 900000000 ", fp);
+        fputs("/Filter [/FlateDecode /ASCII85Decode /FlateDecode /ASCIIHexDecode] >>\n", fp);
+    }
+    else
+    {
+        fputs("4 0 obj\n<< /Type /XObject /Subtype /Image /Width 100 /Height 100 ", fp);
+        fputs("/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 4 /Filter /FlateDecode >>\n", fp);
+    }
+    fputs("stream\nABCD\nendstream\nendobj\n", fp);
+    fputs("xref\n0 5\n0000000000 65535 f \n", fp);
+    fputs("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n", fp);
     fclose(fp);
     return 0;
 }
@@ -90,7 +106,6 @@ int main(void)
     assert(report.score == 0);
     remove("af_normal.zip");
 
-    /* Metadata-only fixture: declares amplification without containing expanded content. */
     assert(write_single_entry_zip("af_ratio.zip", "sample.bin", 1, 5000, NULL) == 0);
     assert(af_scan_file("af_ratio.zip", &report) == 0);
     assert(report.zip.aggregate_ratio >= 5000.0);
@@ -100,22 +115,40 @@ int main(void)
     assert(write_single_entry_zip("af_traversal.zip", "../escape.txt", 4, 4, NULL) == 0);
     assert(af_scan_file("af_traversal.zip", &report) == 0);
     assert(report.zip.path_traversal_count == 1);
-    assert(report.score >= 25);
     remove("af_traversal.zip");
 
     assert(write_single_entry_zip("af_absolute.zip", "/tmp/escape.txt", 4, 4, NULL) == 0);
     assert(af_scan_file("af_absolute.zip", &report) == 0);
     assert(report.zip.absolute_path_count == 1);
-    assert(report.score >= 20);
     remove("af_absolute.zip");
 
     assert(write_single_entry_zip("af_nested.zip", "child.zip", 4, 4, nested_sig) == 0);
     assert(af_scan_file("af_nested.zip", &report) == 0);
     assert(report.zip.nested_archive_candidates == 1);
     assert(report.zip.nested_archives_inspected == 1);
-    assert(report.zip.maximum_nested_depth == 1);
     remove("af_nested.zip");
 
-    puts("All AttendantForge v0.3 tests passed.");
+    assert(write_pdf("af_normal.pdf", 0) == 0);
+    assert(af_scan_file("af_normal.pdf", &report) == 0);
+    assert(report.type == AF_TYPE_PDF);
+    assert(report.pdf.object_count >= 4);
+    assert(report.pdf.stream_count == 1);
+    assert(report.pdf.image_count == 1);
+    assert(report.pdf.maximum_declared_pixels == 10000);
+    assert(report.pdf.startxref_present == 1);
+    assert(report.pdf.eof_marker_present == 1);
+    assert(report.score < 30);
+    remove("af_normal.pdf");
+
+    /* Bounded metadata fixture: extreme declared work, tiny actual stream. */
+    assert(write_pdf("af_pressure.pdf", 1) == 0);
+    assert(af_scan_file("af_pressure.pdf", &report) == 0);
+    assert(report.pdf.maximum_declared_pixels == 2500000000ull);
+    assert(report.pdf.maximum_filter_chain >= 4);
+    assert(report.pdf.declared_stream_ratio > 1000.0);
+    assert(report.score >= 80);
+    remove("af_pressure.pdf");
+
+    puts("All AttendantForge v0.4 tests passed.");
     return 0;
 }

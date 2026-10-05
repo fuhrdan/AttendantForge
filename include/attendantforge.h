@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AF_VERSION "0.3.0"
+#define AF_VERSION "0.4.0"
 #define AF_MAX_NESTED_DEPTH 3u
 #define AF_MAX_NESTED_ARCHIVES 64u
 
@@ -48,13 +48,36 @@ typedef struct
 
 typedef struct
 {
+    uint64_t object_count;
+    uint64_t stream_count;
+    uint64_t filter_count;
+    uint64_t flate_filter_count;
+    uint64_t image_count;
+    uint64_t embedded_file_count;
+    uint64_t declared_stream_bytes;
+    uint64_t total_declared_pixels;
+    uint64_t maximum_declared_pixels;
+    uint64_t estimated_image_memory;
+    uint64_t recommended_memory_budget;
+    double declared_stream_ratio;
+    unsigned int maximum_filter_chain;
+    unsigned int maximum_structure_depth;
+    unsigned int xref_section_count;
+    int startxref_present;
+    int eof_marker_present;
+    int analysis_truncated;
+} AfPdfMetrics;
+
+typedef struct
+{
     const char *path;
     uint64_t file_size;
     AfFileType type;
     unsigned int score;
     AfRiskLevel level;
     AfZipMetrics zip;
-    char notes[1536];
+    AfPdfMetrics pdf;
+    char notes[2048];
 } AfReport;
 
 int af_scan_file(const char *path, AfReport *report);

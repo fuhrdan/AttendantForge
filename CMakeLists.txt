@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(AttendantForge VERSION 0.3.0 LANGUAGES C)
+project(AttendantForge VERSION 0.4.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -8,6 +8,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 add_library(attendantforge_core
     src/attendantforge.c
     src/zip_analyzer.c
+    src/pdf_analyzer.c
 )
 target_include_directories(attendantforge_core PUBLIC include PRIVATE src)
 
