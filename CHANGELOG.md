@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+- Added recursive `batch` directory/quarantine scanning.
+- Added NDJSON and CSV telemetry output.
+- Added extension-versus-signature mismatch detection.
+- Added `allow_formats` and `deny_formats` admission policy controls.
+- Added aggregate batch summary counters and strongest-result exit behavior.
+- Added `docs/BATCH.md`.
+
 ## v0.8.0
 
 ### Added

@@ -122,7 +122,7 @@ static int write_policy(const char *path)
 {
     FILE *fp = fopen(path, "w");
     if (fp == NULL) return -1;
-    fputs("profile=upload-server\nwarn_score=40\nblock_score=65\nstrict=false\n", fp);
+    fputs("profile=upload-server\nwarn_score=40\nblock_score=65\nstrict=false\nallow_formats=ZIP,PDF,PNG\ndeny_formats=PDF\n", fp);
     fclose(fp);
     return 0;
 }
@@ -319,8 +319,23 @@ int main(void)
     assert(af_policy_load_file(&policy, "af_policy.conf", policy_error, sizeof(policy_error)) == 0);
     assert(strcmp(policy.profile, "upload-server") == 0);
     assert(policy.warn_score == 40 && policy.block_score == 65);
+    assert(af_policy_format_allowed(&policy, AF_TYPE_ZIP) == 1);
+    assert(af_policy_format_allowed(&policy, AF_TYPE_PDF) == 0);
+    assert(af_policy_format_allowed(&policy, AF_TYPE_GZIP) == 0);
     remove("af_policy.conf");
 
-    puts("All AttendantForge v0.8 tests passed.");
+
+    assert(write_png_fixture("af_disguised.pdf", 64, 64) == 0);
+    assert(af_scan_file("af_disguised.pdf", &report) == 0);
+    assert(report.type == AF_TYPE_PNG);
+    assert(report.extension_signature_mismatch == 1);
+    remove("af_disguised.pdf");
+
+    af_policy_defaults(&policy);
+    policy.deny_formats = AF_FORMAT_BIT(AF_TYPE_PDF);
+    assert(af_policy_format_allowed(&policy, AF_TYPE_PDF) == 0);
+    assert(af_policy_format_allowed(&policy, AF_TYPE_ZIP) == 1);
+
+    puts("All AttendantForge v0.9 tests passed.");
     return 0;
 }

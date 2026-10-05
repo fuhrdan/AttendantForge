@@ -21,14 +21,20 @@
 ## v0.7 — Constrained dynamic probe
 - isolated parser worker with hard RAM/CPU/elapsed-time ceilings
 
-## v0.8 — General file-admission formats (current)
+## v0.8 — General file-admission formats
 - metadata-first GZIP and TAR analyzers
 - PNG and JPEG decoded-pixel/memory estimators
 - per-format admission ceilings in policy profiles/files
 - unified JSON/text reporting and regression fixtures
 
-## v0.9+
-- richer telemetry and batch/directory scanning
-- format allow/deny lists and MIME/signature mismatch reporting
+## v0.9 — Operational scanning (current)
+- recursive batch/directory scanning
+- NDJSON and CSV telemetry
+- extension/signature mismatch detection
+- explicit format allow/deny policy controls
+- aggregate quarantine-directory summaries and strongest-result exit behavior
+
+## v1.0+
+- richer telemetry and audit integration
 - additional containers/images where metadata-first analysis is reliable
 - optional disposable-sandbox adapters for selected external parsers/renderers

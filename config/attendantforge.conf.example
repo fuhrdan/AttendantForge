@@ -1,4 +1,4 @@
-# AttendantForge v0.7 policy file
+# AttendantForge v0.9 policy file
 # Format: key=value. Blank lines and lines beginning with # or ; are ignored.
 # Precedence: defaults -> CLI --profile -> this file -> explicit CLI score/strict flags.
 
@@ -7,7 +7,11 @@ warn_score=45
 block_score=70
 strict=false
 
-# v0.8 per-format admission ceilings
+# v0.9 per-format admission ceilings
 max_gzip_ratio=500
 max_tar_entries=100000
 max_image_pixels=250000000
+
+# v0.9 format admission controls
+allow_formats=*
+deny_formats=

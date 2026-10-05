@@ -126,7 +126,7 @@ untrusted file
 The worker is intentionally not a generic command runner. This avoids turning a
 preflight scanner into a launcher for potentially vulnerable desktop handlers.
 
-## v0.8 format router
+## v0.9 format router
 
 ```text
 signature probe
@@ -142,4 +142,4 @@ signature probe
 shared score + per-format admission policy
 ```
 
-All new v0.8 analyzers are metadata-first and avoid full decompression/rendering.
+All new v0.9 analyzers are metadata-first and avoid full decompression/rendering.

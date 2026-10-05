@@ -1,4 +1,5 @@
 #include "policy.h"
+#include "attendantforge.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -57,6 +58,8 @@ void af_policy_defaults(AfPolicy *policy)
     policy->max_gzip_ratio = 500.0;
     policy->max_tar_entries = 100000ull;
     policy->max_image_pixels = 250000000ull;
+    policy->allow_formats = 0xffffffffu;
+    policy->deny_formats = 0u;
     snprintf(policy->profile, sizeof(policy->profile), "%s", "desktop");
 }
 
@@ -127,6 +130,47 @@ static int parse_double_positive(const char *text, double *value)
     return 1;
 }
 
+
+static uint32_t format_name_bit(const char *name)
+{
+    if (strcmp(name, "ZIP") == 0) return AF_FORMAT_BIT(AF_TYPE_ZIP);
+    if (strcmp(name, "PDF") == 0) return AF_FORMAT_BIT(AF_TYPE_PDF);
+    if (strcmp(name, "GZIP") == 0) return AF_FORMAT_BIT(AF_TYPE_GZIP);
+    if (strcmp(name, "TAR") == 0) return AF_FORMAT_BIT(AF_TYPE_TAR);
+    if (strcmp(name, "PNG") == 0) return AF_FORMAT_BIT(AF_TYPE_PNG);
+    if (strcmp(name, "JPEG") == 0 || strcmp(name, "JPG") == 0) return AF_FORMAT_BIT(AF_TYPE_JPEG);
+    if (strcmp(name, "UNKNOWN") == 0) return AF_FORMAT_BIT(AF_TYPE_UNKNOWN);
+    return 0u;
+}
+
+static int parse_format_list(const char *text, uint32_t *mask, int allow_star)
+{
+    char copy[512]; char *tok; uint32_t result = 0u;
+    if (text == NULL || mask == NULL) return 0;
+    if (allow_star && strcmp(text, "*") == 0) { *mask = 0xffffffffu; return 1; }
+    snprintf(copy, sizeof(copy), "%s", text);
+    tok = strtok(copy, ",");
+    while (tok != NULL)
+    {
+        char upper[32]; size_t i, n; uint32_t bit;
+        tok = trim(tok); n = strlen(tok); if (n >= sizeof(upper)) return 0;
+        for (i = 0; i < n; i++)
+            upper[i] = (char)toupper((unsigned char)tok[i]);
+        upper[n] = '\0';
+        bit = format_name_bit(upper); if (bit == 0u && strcmp(upper,"UNKNOWN") != 0) return 0;
+        result |= bit; tok = strtok(NULL, ",");
+    }
+    *mask = result; return 1;
+}
+
+int af_policy_format_allowed(const AfPolicy *policy, int file_type)
+{
+    uint32_t bit;
+    if (policy == NULL || file_type < 0 || file_type > 31) return 0;
+    bit = AF_FORMAT_BIT(file_type);
+    return ((policy->allow_formats & bit) != 0u) && ((policy->deny_formats & bit) == 0u);
+}
+
 int af_policy_load_file(AfPolicy *policy, const char *path, char *error, size_t error_size)
 {
     FILE *fp;
@@ -185,6 +229,14 @@ int af_policy_load_file(AfPolicy *policy, const char *path, char *error, size_t 
         else if (strcmp(key, "max_image_pixels") == 0)
         {
             if (!parse_u64(value, &policy->max_image_pixels)) { set_error(error, error_size, "invalid max_image_pixels"); fclose(fp); return -1; }
+        }
+        else if (strcmp(key, "allow_formats") == 0)
+        {
+            if (!parse_format_list(value, &policy->allow_formats, 1)) { set_error(error, error_size, "invalid allow_formats"); fclose(fp); return -1; }
+        }
+        else if (strcmp(key, "deny_formats") == 0)
+        {
+            if (!parse_format_list(value, &policy->deny_formats, 0)) { set_error(error, error_size, "invalid deny_formats"); fclose(fp); return -1; }
         }
         else
         {

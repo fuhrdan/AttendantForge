@@ -1,4 +1,4 @@
-# Format Cost Models — v0.8
+# Format Cost Models — v0.9
 
 AttendantForge uses bounded, metadata-first inspection. It intentionally avoids
 performing the expensive operation it is trying to predict.

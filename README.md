@@ -1,4 +1,4 @@
-# AttendantForge v0.8.0
+# AttendantForge v0.9.0
 
 **AttendantForge** is a defensive, format-aware file resource-cost assessor. It
 preflights untrusted files before another application extracts, decodes,
@@ -9,12 +9,11 @@ AttendantForge is **not antivirus**. Its primary question is:
 > How much work is this file asking the next parser to perform relative to the
 > file that was received?
 
-## v0.8 highlights
+## v0.9 highlights
 
-v0.8 turns AttendantForge from a ZIP/PDF specialist into the beginning of a
-**general-purpose file admission firewall**.
+v0.9 makes AttendantForge practical for **quarantine directories, download folders, and upload staging areas**. It adds recursive batch scanning, NDJSON/CSV telemetry, recognized extension-versus-signature mismatch detection, explicit format allow/deny rules, and aggregate scan summaries.
 
-Supported static analyzers now include:
+The v0.8 metadata-first analyzers remain supported:
 
 - ZIP — central-directory expansion accounting, ZIP64, nested candidates, path safety
 - PDF — bounded structural/stream/image/xref/object-stream analysis
@@ -23,7 +22,7 @@ Supported static analyzers now include:
 - PNG — IHDR dimensions, pixel count, estimated decoded-memory cost
 - JPEG — bounded marker walk, frame dimensions, pixel count, estimated decoded-memory cost
 
-The opt-in v0.7 constrained `probe` remains available for all supported formats.
+The opt-in v0.7 constrained `probe` also remains available.
 
 ## Build
 
@@ -109,7 +108,8 @@ resource-amplification principle used for ZIP, GZIP, and PDF analysis.
 - [`docs/POLICY.md`](docs/POLICY.md) — profiles, external policy files, and format ceilings
 - [`docs/PROBE.md`](docs/PROBE.md) — isolated parser probe
 - [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — upload/download gateway pattern
-- [`docs/FORMATS.md`](docs/FORMATS.md) — v0.8 format-specific cost model
+- [`docs/FORMATS.md`](docs/FORMATS.md) — format-specific cost model
+- [`docs/BATCH.md`](docs/BATCH.md) — directory scanning, telemetry, mismatch checks, and format admission
 
 ## Safety scope
 
@@ -122,3 +122,12 @@ malware scanning where appropriate, and quota-controlled non-executable storage.
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+## v0.9 batch scanning
+
+```bash
+attendantforge batch --recursive --profile upload-server --ndjson scan.ndjson ./quarantine
+attendantforge batch --csv scan.csv ./downloads
+```
+
+Policy files can restrict admitted formats with `allow_formats` and `deny_formats`. v0.9 also flags recognized filename-extension/signature mismatches, such as a `.pdf` whose bytes identify as a ZIP archive.

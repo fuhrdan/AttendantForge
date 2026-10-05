@@ -44,7 +44,7 @@ keys are rejected rather than silently ignored. Scores must be 0–100 and
 `strict=true` ensures the effective block threshold is no higher than 60 unless
 an explicit command-line `--block-score` override is supplied.
 
-## v0.8 format ceilings
+## v0.9 format ceilings
 
 Policies may also set explicit format admission ceilings:
 

@@ -1,6 +1,7 @@
 #include "attendantforge.h"
 #include "policy.h"
 #include "probe.h"
+#include "batch.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -30,6 +31,9 @@ typedef struct
     uint64_t memory_mib;
     unsigned int cpu_seconds;
     unsigned int timeout_ms;
+    int recursive;
+    AfBatchFormat batch_format;
+    const char *output_path;
 } AfCliOptions;
 
 static void print_usage(const char *exe)
@@ -37,6 +41,7 @@ static void print_usage(const char *exe)
     printf("AttendantForge v%s\n", AF_VERSION);
     printf("Usage: %s scan [options] <file>\n", exe);
     printf("       %s probe [options] <file>\n", exe);
+    printf("       %s batch [options] <directory>\n", exe);
     printf("       %s --version\n\n", exe);
     printf("Options:\n");
     printf("  --json                 Emit machine-readable JSON.\n");
@@ -48,6 +53,9 @@ static void print_usage(const char *exe)
     printf("  --memory-mib N         Probe memory ceiling in MiB (probe only; default 256).\n");
     printf("  --cpu-seconds N        Probe CPU ceiling in seconds (probe only; default 2).\n");
     printf("  --timeout-ms N         Probe elapsed-time ceiling in ms (probe only; default 3000).\n");
+    printf("  --recursive            Recurse into subdirectories (batch only).\n");
+    printf("  --ndjson FILE          Write one JSON object per scanned file (batch only; - for stdout).\n");
+    printf("  --csv FILE             Write CSV telemetry (batch only; - for stdout).\n");
     printf("  --help                 Show this help.\n\n");
     printf("Precedence: defaults -> profile -> policy file -> explicit CLI overrides.\n");
     printf("Exit codes: 0 allow, 10 warn, 20 block/limit hit, 2 usage, 3 scan/probe error.\n");
@@ -83,6 +91,7 @@ static int parse_uint_range(const char *text, unsigned int min_value, unsigned i
 static int format_policy_block(const AfReport *report, const AfPolicy *policy)
 {
     if (report == NULL || policy == NULL) return 0;
+    if (!af_policy_format_allowed(policy, report->type)) return 1;
     if (report->type == AF_TYPE_GZIP && policy->max_gzip_ratio > 0.0 && report->gzip.expansion_ratio > policy->max_gzip_ratio) return 1;
     if (report->type == AF_TYPE_TAR && policy->max_tar_entries > 0ull && report->tar.entry_count > policy->max_tar_entries) return 1;
     if ((report->type == AF_TYPE_PNG || report->type == AF_TYPE_JPEG) && policy->max_image_pixels > 0ull && report->image.pixel_count > policy->max_image_pixels) return 1;
@@ -136,6 +145,7 @@ static void print_json_report(const AfReport *report, const AfPolicy *policy, co
     printf("  \"file\": "); json_string(report->path); printf(",\n");
     printf("  \"type\": \"%s\",\n", af_type_name(report->type));
     printf("  \"file_size_bytes\": %llu,\n", (unsigned long long)report->file_size);
+    printf("  \"extension_signature_mismatch\": %s,\n", report->extension_signature_mismatch ? "true" : "false");
     printf("  \"risk\": {\"score\": %u, \"level\": \"%s\"},\n", report->score, af_risk_name(report->level));
     printf("  \"policy\": {\"profile\": "); json_string(policy->profile);
     printf(", \"policy_file\": "); json_string(policy->policy_file);
@@ -246,6 +256,7 @@ static void print_text_report(const AfReport *report, const AfPolicy *policy, co
     printf("File:        %s\n", report->path);
     printf("Type:        %s\n", af_type_name(report->type));
     printf("Size:        %.2f MiB\n", to_mib(report->file_size));
+    printf("Extension/signature mismatch: %s\n", report->extension_signature_mismatch ? "YES" : "NO");
 
     if (report->type == AF_TYPE_ZIP)
     {
@@ -372,6 +383,9 @@ static int parse_cli(int argc, char **argv, AfCliOptions *opts)
             if (++i >= argc || !parse_uint_range(argv[i], 100u, 3600000u, &opts->timeout_ms)) return 0;
             opts->timeout_set = 1;
         }
+        else if (strcmp(argv[i], "--recursive") == 0) opts->recursive = 1;
+        else if (strcmp(argv[i], "--ndjson") == 0) { if (++i >= argc) return 0; opts->batch_format = AF_BATCH_NDJSON; opts->output_path = argv[i]; }
+        else if (strcmp(argv[i], "--csv") == 0) { if (++i >= argc) return 0; opts->batch_format = AF_BATCH_CSV; opts->output_path = argv[i]; }
         else if (strcmp(argv[i], "--help") == 0) return 2;
         else if (argv[i][0] == '-') return 0;
         else if (opts->path == NULL) opts->path = argv[i];
@@ -407,7 +421,7 @@ int main(int argc, char **argv)
         print_usage(argv[0]);
         return AF_EXIT_ALLOW;
     }
-    if (argc < 3 || (strcmp(argv[1], "scan") != 0 && strcmp(argv[1], "probe") != 0))
+    if (argc < 3 || (strcmp(argv[1], "scan") != 0 && strcmp(argv[1], "probe") != 0 && strcmp(argv[1], "batch") != 0))
     {
         print_usage(argv[0]);
         return AF_EXIT_USAGE;
@@ -446,6 +460,19 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "Policy error: %s\n", error);
         return AF_EXIT_USAGE;
+    }
+
+    if (strcmp(argv[1], "batch") == 0)
+    {
+        AfBatchSummary summary;
+        if (opts.batch_format == AF_BATCH_TEXT && opts.output_path != NULL) { fprintf(stderr, "Batch output requires --ndjson or --csv.\n"); return AF_EXIT_USAGE; }
+        rc = af_batch_scan(opts.path, opts.recursive, opts.batch_format, opts.output_path, &policy, &summary);
+        if (rc != 0) { fprintf(stderr, "Unable to scan directory '%s' (error %d).\n", opts.path, rc); return AF_EXIT_SCAN_ERROR; }
+        fprintf(stderr, "AttendantForge v%s batch summary: files=%llu scanned=%llu allow=%llu warn=%llu block=%llu errors=%llu mismatches=%llu highest_score=%u\n",
+            AF_VERSION,(unsigned long long)summary.files_seen,(unsigned long long)summary.scanned,(unsigned long long)summary.allowed,(unsigned long long)summary.warned,(unsigned long long)summary.blocked,(unsigned long long)summary.errors,(unsigned long long)summary.mismatches,summary.highest_score);
+        if (summary.blocked > 0) return AF_EXIT_BLOCK;
+        if (summary.warned > 0) return AF_EXIT_WARN;
+        return summary.errors > 0 ? AF_EXIT_SCAN_ERROR : AF_EXIT_ALLOW;
     }
 
     rc = af_scan_file(opts.path, &report);

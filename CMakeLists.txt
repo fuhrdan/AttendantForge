@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(AttendantForge VERSION 0.8.0 LANGUAGES C)
+project(AttendantForge VERSION 0.9.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -12,6 +12,7 @@ add_library(attendantforge_core
     src/policy.c
     src/probe.c
     src/format_analyzer.c
+    src/batch.c
 )
 target_include_directories(attendantforge_core PUBLIC include PRIVATE src)
 

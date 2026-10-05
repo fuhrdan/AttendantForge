@@ -3,7 +3,7 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 CPPFLAGS ?= -Iinclude -Isrc
 BUILD := build-make
 
-CORE := src/attendantforge.c src/zip_analyzer.c src/pdf_analyzer.c src/policy.c src/probe.c src/format_analyzer.c
+CORE := src/attendantforge.c src/zip_analyzer.c src/pdf_analyzer.c src/policy.c src/probe.c src/format_analyzer.c src/batch.c
 
 .PHONY: all test clean
 

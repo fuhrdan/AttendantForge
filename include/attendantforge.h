@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AF_VERSION "0.8.0"
+#define AF_VERSION "0.9.0"
 #define AF_MAX_NESTED_DEPTH 3u
 #define AF_MAX_NESTED_ARCHIVES 64u
 
@@ -130,6 +130,8 @@ typedef struct
     AfGzipMetrics gzip;
     AfTarMetrics tar;
     AfImageMetrics image;
+    int extension_signature_mismatch;
+    char extension[16];
     char notes[2048];
 } AfReport;
 
@@ -138,5 +140,6 @@ AfFileType af_detect_type(const unsigned char *header, size_t len);
 const char *af_type_name(AfFileType type);
 const char *af_risk_name(AfRiskLevel level);
 AfRiskLevel af_score_to_level(unsigned int score);
+AfFileType af_extension_type(const char *path, char *extension, size_t extension_size);
 
 #endif

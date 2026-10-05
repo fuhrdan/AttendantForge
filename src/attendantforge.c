@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 static uint64_t get_file_size(FILE *fp)
 {
@@ -51,6 +52,29 @@ const char *af_type_name(AfFileType type)
     }
 }
 
+
+AfFileType af_extension_type(const char *path, char *extension, size_t extension_size)
+{
+    const char *dot;
+    size_t i, n;
+    char ext[16] = {0};
+    if (extension != NULL && extension_size > 0) extension[0] = '\0';
+    if (path == NULL) return AF_TYPE_UNKNOWN;
+    dot = strrchr(path, '.');
+    if (dot == NULL || dot[1] == '\0') return AF_TYPE_UNKNOWN;
+    dot++;
+    n = strlen(dot); if (n >= sizeof(ext)) n = sizeof(ext) - 1;
+    for (i = 0; i < n; i++) ext[i] = (char)tolower((unsigned char)dot[i]);
+    if (extension != NULL && extension_size > 0) snprintf(extension, extension_size, "%s", ext);
+    if (strcmp(ext, "zip") == 0) return AF_TYPE_ZIP;
+    if (strcmp(ext, "pdf") == 0) return AF_TYPE_PDF;
+    if (strcmp(ext, "gz") == 0 || strcmp(ext, "gzip") == 0) return AF_TYPE_GZIP;
+    if (strcmp(ext, "tar") == 0) return AF_TYPE_TAR;
+    if (strcmp(ext, "png") == 0) return AF_TYPE_PNG;
+    if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return AF_TYPE_JPEG;
+    return AF_TYPE_UNKNOWN;
+}
+
 const char *af_risk_name(AfRiskLevel level)
 {
     switch (level)
@@ -87,6 +111,15 @@ int af_scan_file(const char *path, AfReport *report)
     report->file_size = get_file_size(fp);
     read_count = fread(header, 1, sizeof(header), fp);
     report->type = af_detect_type(header, read_count);
+    {
+        AfFileType extension_type = af_extension_type(path, report->extension, sizeof(report->extension));
+        if (extension_type != AF_TYPE_UNKNOWN && report->type != AF_TYPE_UNKNOWN && extension_type != report->type)
+        {
+            report->extension_signature_mismatch = 1;
+            score += 20;
+            append_note(report->notes, sizeof(report->notes), "Filename extension does not match file signature. ");
+        }
+    }
     if (report->type == AF_TYPE_UNKNOWN && report->file_size >= 512)
     {
         unsigned char magic[5];
