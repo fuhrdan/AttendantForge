@@ -16,15 +16,20 @@
 - JSON output, stable exit codes, configurable thresholds, strict mode
 - indirect-reference inventory and classic `startxref` validation
 
-## v0.6 — Policy + modern PDF structures (current)
-- external policy files
-- `desktop`, `upload-server`, and `high-security` profiles
-- xref-stream and object-stream awareness
-- incremental-update inventory
+## v0.6 — Policy + modern PDF structures
+- external policy files and named profiles
+- xref/object-stream and incremental-update awareness
 - upload-gateway integration example
 
-## v0.7+
-- optional OS-constrained dynamic probe with hard CPU/RAM/time quotas
+## v0.7 — Constrained dynamic probe (current)
+- opt-in isolated AttendantForge parser worker
+- hard memory/CPU/elapsed-time ceilings
+- Linux/Unix rlimits and Windows Job Objects
+- measured-vs-predicted parser resource reporting
+- fail-closed limit/timeout behavior
+
+## v0.8+
 - additional archive/container/image formats
-- policy controls for format allowlists and per-format limits
+- per-format policy controls and allowlists
 - richer metrics/telemetry output for fleet deployment
+- optional disposable-sandbox adapters for selected external parsers/renderers

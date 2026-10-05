@@ -1,6 +1,6 @@
 # Upload gateway example
 
-`upload_gate.py` demonstrates the intended v0.6 integration pattern after an
+`upload_gate.py` demonstrates the intended v0.7 integration pattern after an
 application has saved an untrusted upload to a temporary file.
 
 ```bash

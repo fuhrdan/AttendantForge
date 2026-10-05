@@ -1,6 +1,6 @@
 # Policy configuration
 
-AttendantForge v0.6 separates **file analysis** from **deployment policy**.
+AttendantForge v0.7 separates **file analysis** from **deployment policy**.
 The analyzer produces a 0–100 resource-risk score; the policy decides when that
 score becomes WARN or BLOCK.
 

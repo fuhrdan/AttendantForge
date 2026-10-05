@@ -91,3 +91,37 @@ explicit CLI overrides
 
 This lets one binary serve desktop inspection, public upload services, and
 higher-security environments without rewriting format heuristics.
+
+## v0.7 constrained probe
+
+The optional dynamic path adds a process boundary after static analysis:
+
+```text
+untrusted file
+    |
+    +--> bounded static scan --> predicted resource budget
+    |
+    +--> opt-in probe
+            |
+            v
+      constrained child process
+      + memory ceiling
+      + CPU ceiling
+      + wall-clock ceiling
+      + no temp-file creation
+            |
+            v
+      AttendantForge parser only
+            |
+            v
+      measured peak RAM / CPU / elapsed
+            |
+      +-----+-------------------+
+      |                         |
+   completes                 limit hit
+      |                         |
+ policy score              fail-closed BLOCK
+```
+
+The worker is intentionally not a generic command runner. This avoids turning a
+preflight scanner into a launcher for potentially vulnerable desktop handlers.

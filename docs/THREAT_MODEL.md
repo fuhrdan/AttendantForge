@@ -105,7 +105,7 @@ AttendantForge's long-term model is to score **estimated resource pressure**, no
 
 ## Out of scope
 
-AttendantForge v0.6 does not:
+AttendantForge v0.7 does not:
 
 - execute embedded scripts;
 - render PDFs or decode PDF stream payloads;
@@ -114,12 +114,12 @@ AttendantForge v0.6 does not:
 - determine whether a document contains malware;
 - guarantee that a file is safe to open.
 
-v0.6 retains bounded PDF static analysis, adds external policy controls, and recognizes modern xref/object-stream structures. A later release may add an optional OS-constrained dynamic probe.
+v0.7 retains bounded PDF static analysis and adds an opt-in OS-constrained parser probe. The probe executes only AttendantForge parsers; it does not launch general-purpose viewers or extractors.
 
 
 ## Current defensive checks
 
-AttendantForge v0.6 converts the threat model into static checks without expanding arbitrary payloads:
+AttendantForge v0.7 converts the threat model into static checks without expanding arbitrary payloads:
 
 - declared compressed vs. uncompressed bytes and amplification ratio;
 - entry-count and largest-entry pressure;
@@ -133,7 +133,7 @@ AttendantForge v0.6 converts the threat model into static checks without expandi
 These checks do not prove a file is safe. They provide an inexpensive preflight risk estimate so a caller can allow, warn, quarantine, or pass the file to a separately resource-constrained sandbox.
 
 
-## v0.6 PDF checks
+## PDF checks
 
 The PDF analyzer adds a bounded preflight pass that does not render the document or inflate stream data. It inventories:
 
@@ -153,6 +153,6 @@ The PDF analyzer adds a bounded preflight pass that does not render the document
 The resulting score estimates **resource pressure**, not malicious intent. A legitimate engineering drawing or image-heavy report can be expensive, while a maliciously constructed file may exploit implementation details not visible to static heuristics. The score is therefore intended to drive a policy decision, not replace a hardened parser or sandbox.
 
 
-## v0.6 pipeline policy
+## Pipeline policy
 
-A scanner finding is not automatically a malware verdict. v0.6 exposes profiles, policy files, and explicit thresholds so an upload/download gateway can choose its own operational posture. The default desktop profile uses WARN at 60 and BLOCK at 80; upload-server and high-security profiles tighten those thresholds. Stable exit codes let a caller enforce the decision without scraping human-readable output.
+A scanner finding is not automatically a malware verdict. v0.7 exposes profiles, policy files, and explicit thresholds so an upload/download gateway can choose its own operational posture. The default desktop profile uses WARN at 60 and BLOCK at 80; upload-server and high-security profiles tighten those thresholds. Stable exit codes let a caller enforce the decision without scraping human-readable output.

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.7.0
+
+### Added
+- Opt-in `probe` command using an isolated AttendantForge parser worker.
+- Configurable `--memory-mib`, `--cpu-seconds`, and `--timeout-ms` ceilings.
+- Linux/Unix address-space and CPU rlimits with parent wall-clock enforcement.
+- Windows Job Object process-memory and CPU limits with parent wall-clock enforcement.
+- Peak-memory, CPU-time, elapsed-time, predicted-memory, and measured/predicted reporting.
+- JSON `probe` object for machine-readable automation.
+- `docs/PROBE.md` documenting the isolation model and safety boundary.
+
+### Changed
+- Exit code `20` also represents a dynamic-probe resource limit or timeout.
+- Version updated to 0.7.0 across builds, CLI output, tests, and documentation.
+
+### Safety
+- The dynamic worker executes only AttendantForge's bounded parsers. It does not
+  launch arbitrary viewers/extractors, render PDFs, inflate arbitrary nested ZIP
+  members, execute document actions, or open embedded content.
+
 ## v0.6.0
 
 ### Added

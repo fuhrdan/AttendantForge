@@ -1,5 +1,6 @@
 #include "attendantforge.h"
 #include "policy.h"
+#include "probe.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -23,12 +24,19 @@ typedef struct
     const char *profile;
     const char *policy_file;
     const char *path;
+    int memory_set;
+    int cpu_set;
+    int timeout_set;
+    uint64_t memory_mib;
+    unsigned int cpu_seconds;
+    unsigned int timeout_ms;
 } AfCliOptions;
 
 static void print_usage(const char *exe)
 {
     printf("AttendantForge v%s\n", AF_VERSION);
     printf("Usage: %s scan [options] <file>\n", exe);
+    printf("       %s probe [options] <file>\n", exe);
     printf("       %s --version\n\n", exe);
     printf("Options:\n");
     printf("  --json                 Emit machine-readable JSON.\n");
@@ -37,9 +45,12 @@ static void print_usage(const char *exe)
     printf("  --strict               Enforce a block threshold no higher than 60.\n");
     printf("  --warn-score N         Warning threshold, 0-100.\n");
     printf("  --block-score N        Blocking threshold, 0-100.\n");
+    printf("  --memory-mib N         Probe memory ceiling in MiB (probe only; default 256).\n");
+    printf("  --cpu-seconds N        Probe CPU ceiling in seconds (probe only; default 2).\n");
+    printf("  --timeout-ms N         Probe elapsed-time ceiling in ms (probe only; default 3000).\n");
     printf("  --help                 Show this help.\n\n");
     printf("Precedence: defaults -> profile -> policy file -> explicit CLI overrides.\n");
-    printf("Exit codes: 0 allow, 10 warn, 20 block, 2 usage, 3 scan error.\n");
+    printf("Exit codes: 0 allow, 10 warn, 20 block/limit hit, 2 usage, 3 scan/probe error.\n");
 }
 
 static double to_mib(uint64_t bytes)
@@ -54,6 +65,17 @@ static int parse_score(const char *text, unsigned int *value)
     errno = 0;
     parsed = strtoul(text, &end, 10);
     if (errno != 0 || end == text || *end != '\0' || parsed > 100ul) return 0;
+    *value = (unsigned int)parsed;
+    return 1;
+}
+
+static int parse_uint_range(const char *text, unsigned int min_value, unsigned int max_value, unsigned int *value)
+{
+    char *end = NULL;
+    unsigned long parsed;
+    errno = 0;
+    parsed = strtoul(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || parsed < min_value || parsed > max_value) return 0;
     *value = (unsigned int)parsed;
     return 1;
 }
@@ -96,7 +118,7 @@ static void json_string(const char *value)
     putchar('"');
 }
 
-static void print_json_report(const AfReport *report, const AfPolicy *policy)
+static void print_json_report(const AfReport *report, const AfPolicy *policy, const AfProbeResult *probe, const AfProbeLimits *limits)
 {
     printf("{\n");
     printf("  \"tool\": \"AttendantForge\",\n  \"version\": \"%s\",\n", AF_VERSION);
@@ -158,10 +180,25 @@ static void print_json_report(const AfReport *report, const AfPolicy *policy)
         printf("    \"recommended_memory_budget_bytes\": %llu\n", (unsigned long long)report->pdf.recommended_memory_budget);
         printf("  },\n");
     }
+    if (probe != NULL && limits != NULL)
+    {
+        double memory_ratio = probe->predicted_memory_budget_bytes > 0 ? (double)probe->peak_memory_bytes / (double)probe->predicted_memory_budget_bytes : 0.0;
+        printf("  \"probe\": {\n");
+        printf("    \"status\": \"%s\",\n", af_probe_status_name(probe->status));
+        printf("    \"peak_memory_bytes\": %llu,\n", (unsigned long long)probe->peak_memory_bytes);
+        printf("    \"cpu_time_ms\": %llu,\n", (unsigned long long)probe->cpu_time_ms);
+        printf("    \"elapsed_time_ms\": %llu,\n", (unsigned long long)probe->elapsed_time_ms);
+        printf("    \"temp_bytes_written\": %llu,\n", (unsigned long long)probe->temp_bytes_written);
+        printf("    \"predicted_memory_budget_bytes\": %llu,\n", (unsigned long long)probe->predicted_memory_budget_bytes);
+        printf("    \"measured_to_predicted_memory_ratio\": %.6f,\n", memory_ratio);
+        printf("    \"limits\": {\"memory_bytes\": %llu, \"cpu_seconds\": %u, \"timeout_ms\": %u},\n",
+               (unsigned long long)limits->memory_bytes, limits->cpu_seconds, limits->timeout_ms);
+        printf("    \"detail\": "); json_string(probe->detail); printf("\n  },\n");
+    }
     printf("  \"notes\": "); json_string(report->notes[0] ? report->notes : "None"); printf("\n}\n");
 }
 
-static void print_text_report(const AfReport *report, const AfPolicy *policy)
+static void print_text_report(const AfReport *report, const AfPolicy *policy, const AfProbeResult *probe, const AfProbeLimits *limits)
 {
     printf("AttendantForge v%s\n\n", AF_VERSION);
     printf("File:        %s\n", report->path);
@@ -203,6 +240,18 @@ static void print_text_report(const AfReport *report, const AfPolicy *policy)
         printf("Recommended memory budget:   %.2f MiB\n", to_mib(report->pdf.recommended_memory_budget));
     }
 
+    if (probe != NULL && limits != NULL)
+    {
+        printf("\nIsolated parser probe\n---------------------\n");
+        printf("Status:                     %s\n", af_probe_status_name(probe->status));
+        printf("Peak memory:                %.2f MiB / %.2f MiB limit\n", to_mib(probe->peak_memory_bytes), to_mib(limits->memory_bytes));
+        printf("CPU time:                   %llu ms / %u s limit\n", (unsigned long long)probe->cpu_time_ms, limits->cpu_seconds);
+        printf("Elapsed time:               %llu ms / %u ms limit\n", (unsigned long long)probe->elapsed_time_ms, limits->timeout_ms);
+        printf("Temporary bytes written:    %llu\n", (unsigned long long)probe->temp_bytes_written);
+        printf("Predicted memory budget:    %.2f MiB\n", to_mib(probe->predicted_memory_budget_bytes));
+        printf("Probe detail:               %s\n", probe->detail);
+    }
+
     printf("\nRisk score:  %u / 100\n", report->score);
     printf("Risk level:  %s\n", af_risk_name(report->level));
     printf("Policy:      %s (profile %s, warn >= %u, block >= %u%s)\n", decision_name(report->score, policy),
@@ -239,6 +288,22 @@ static int parse_cli(int argc, char **argv, AfCliOptions *opts)
             if (++i >= argc || !parse_score(argv[i], &opts->block_score)) return 0;
             opts->block_set = 1;
         }
+        else if (strcmp(argv[i], "--memory-mib") == 0)
+        {
+            unsigned int value;
+            if (++i >= argc || !parse_uint_range(argv[i], 16u, 65536u, &value)) return 0;
+            opts->memory_mib = value; opts->memory_set = 1;
+        }
+        else if (strcmp(argv[i], "--cpu-seconds") == 0)
+        {
+            if (++i >= argc || !parse_uint_range(argv[i], 1u, 3600u, &opts->cpu_seconds)) return 0;
+            opts->cpu_set = 1;
+        }
+        else if (strcmp(argv[i], "--timeout-ms") == 0)
+        {
+            if (++i >= argc || !parse_uint_range(argv[i], 100u, 3600000u, &opts->timeout_ms)) return 0;
+            opts->timeout_set = 1;
+        }
         else if (strcmp(argv[i], "--help") == 0) return 2;
         else if (argv[i][0] == '-') return 0;
         else if (opts->path == NULL) opts->path = argv[i];
@@ -252,9 +317,17 @@ int main(int argc, char **argv)
     AfReport report;
     AfPolicy policy;
     AfCliOptions opts;
+    AfProbeLimits probe_limits;
+    AfProbeResult probe_result;
+    const AfProbeResult *probe_ptr = NULL;
+    const AfProbeLimits *limits_ptr = NULL;
     char error[256] = {0};
     int parsed;
     int rc;
+    int is_probe = 0;
+
+    if (argc == 3 && strcmp(argv[1], "--probe-worker") == 0)
+        return af_probe_worker_run(argv[2]);
 
     if (argc == 2 && strcmp(argv[1], "--version") == 0)
     {
@@ -266,15 +339,21 @@ int main(int argc, char **argv)
         print_usage(argv[0]);
         return AF_EXIT_ALLOW;
     }
-    if (argc < 3 || strcmp(argv[1], "scan") != 0)
+    if (argc < 3 || (strcmp(argv[1], "scan") != 0 && strcmp(argv[1], "probe") != 0))
     {
         print_usage(argv[0]);
         return AF_EXIT_USAGE;
     }
+    is_probe = strcmp(argv[1], "probe") == 0;
 
     parsed = parse_cli(argc, argv, &opts);
     if (parsed == 2) { print_usage(argv[0]); return AF_EXIT_ALLOW; }
-    if (parsed != 1) { fprintf(stderr, "Invalid scan options.\n"); print_usage(argv[0]); return AF_EXIT_USAGE; }
+    if (parsed != 1) { fprintf(stderr, "Invalid %s options.\n", is_probe ? "probe" : "scan"); print_usage(argv[0]); return AF_EXIT_USAGE; }
+    if (!is_probe && (opts.memory_set || opts.cpu_set || opts.timeout_set))
+    {
+        fprintf(stderr, "Probe resource-limit options require the 'probe' command.\n");
+        return AF_EXIT_USAGE;
+    }
 
     af_policy_defaults(&policy);
     if (opts.profile != NULL && af_policy_apply_profile(&policy, opts.profile, error, sizeof(error)) != 0)
@@ -308,7 +387,36 @@ int main(int argc, char **argv)
         return AF_EXIT_SCAN_ERROR;
     }
 
-    if (opts.json) print_json_report(&report, &policy);
-    else print_text_report(&report, &policy);
+    if (is_probe)
+    {
+        af_probe_default_limits(&probe_limits);
+        if (opts.memory_set) probe_limits.memory_bytes = opts.memory_mib * 1024ull * 1024ull;
+        if (opts.cpu_set) probe_limits.cpu_seconds = opts.cpu_seconds;
+        if (opts.timeout_set) probe_limits.timeout_ms = opts.timeout_ms;
+        rc = af_run_probe(argv[0], opts.path, &probe_limits, &probe_result);
+        if (rc != 0)
+        {
+            fprintf(stderr, "Unable to start isolated probe for '%s' (error %d).\n", opts.path, rc);
+            return AF_EXIT_SCAN_ERROR;
+        }
+        if (probe_result.status == AF_PROBE_OK && probe_result.measured_score != report.score)
+        {
+            probe_result.status = AF_PROBE_LIMIT_HIT;
+            snprintf(probe_result.detail, sizeof(probe_result.detail),
+                     "The constrained worker produced a different risk score (%u vs parent %u), indicating degraded analysis under the configured resource ceiling.",
+                     probe_result.measured_score, report.score);
+        }
+        probe_ptr = &probe_result;
+        limits_ptr = &probe_limits;
+    }
+
+    if (opts.json) print_json_report(&report, &policy, probe_ptr, limits_ptr);
+    else print_text_report(&report, &policy, probe_ptr, limits_ptr);
+
+    if (is_probe)
+    {
+        if (probe_result.status == AF_PROBE_LIMIT_HIT || probe_result.status == AF_PROBE_TIMEOUT) return AF_EXIT_BLOCK;
+        if (probe_result.status == AF_PROBE_ERROR || probe_result.status == AF_PROBE_UNSUPPORTED) return AF_EXIT_SCAN_ERROR;
+    }
     return decision_exit_code(report.score, &policy);
 }

@@ -1,4 +1,4 @@
-# AttendantForge v0.6.0
+# AttendantForge v0.7.0
 
 **AttendantForge** is a defensive, format-aware file resource-cost assessor. It
 preflights untrusted ZIP and PDF files before another application extracts,
@@ -9,21 +9,19 @@ AttendantForge is **not antivirus**. Its primary question is:
 > How much work is this file asking the next parser to perform relative to the
 > file that was received?
 
-## v0.6 highlights
+## v0.7 highlights
 
-- All v0.5 ZIP/PDF bounded static resource analysis and stable pipeline exit codes.
-- External `key=value` policy files via `--policy FILE`.
-- Built-in `desktop`, `upload-server`, and `high-security` profiles.
-- Deterministic policy precedence: defaults → profile → policy file → CLI overrides.
-- PDF 1.5+ xref-stream recognition.
-- PDF `/ObjStm`, `/XRefStm`, and `/Prev` inventory for object streams, hybrid xref
-  references, and incremental-update chains.
-- `startxref` can now resolve to either a classic xref table or a recognized
-  xref-stream object.
-- JSON output reports the effective profile and policy source.
-- Standard-library Python upload-gateway example in `examples/upload-gateway/`.
-- Bounded parsing only: no arbitrary ZIP inflation, PDF stream decoding,
-  embedded execution, or page rendering.
+- Everything from v0.6: bounded ZIP/PDF analysis, policy profiles/files, JSON,
+  stable pipeline exit codes, and modern PDF xref/object-stream awareness.
+- New opt-in `probe` command that runs AttendantForge's parser in an isolated
+  helper process.
+- Hard probe ceilings for memory, CPU time, and elapsed time.
+- Linux/Unix rlimit enforcement and Windows Job Object enforcement.
+- Measured peak memory, CPU time, elapsed time, and predicted-vs-measured memory
+  reporting.
+- A probe limit hit or timeout fails closed with exit code `20`.
+- The worker creates no temporary files and never launches a PDF viewer, ZIP
+  extractor, shell payload, or arbitrary external command.
 
 ## Build
 
@@ -40,22 +38,25 @@ make
 make test
 ```
 
-## Usage
+## Static scan
 
 ```bash
 ./attendantforge scan suspicious.zip
-./attendantforge scan suspicious.pdf
 ./attendantforge scan --json suspicious.pdf
 ./attendantforge scan --profile upload-server upload.zip
 ./attendantforge scan --policy config/attendantforge.conf.example upload.pdf
-./attendantforge scan --profile high-security --json upload.pdf
 ```
 
-Explicit thresholds are still supported:
+## Constrained probe
 
 ```bash
-./attendantforge scan --warn-score 40 --block-score 70 upload.pdf
+./attendantforge probe suspicious.pdf
+./attendantforge probe --json suspicious.zip
+./attendantforge probe --memory-mib 128 --cpu-seconds 1 --timeout-ms 1500 upload.pdf
 ```
+
+Default probe limits are 256 MiB memory, 2 CPU seconds, and 3000 ms elapsed time.
+See [`docs/PROBE.md`](docs/PROBE.md).
 
 ## Policy profiles
 
@@ -65,41 +66,34 @@ Explicit thresholds are still supported:
 | `upload-server` | 45 | 70 | no | public upload/download pipelines |
 | `high-security` | 30 | 60 | yes | highly untrusted submissions |
 
-See [`docs/POLICY.md`](docs/POLICY.md) for configuration syntax and precedence.
+Policy precedence remains:
+
+```text
+defaults -> named profile -> policy file -> explicit CLI overrides
+```
 
 ## Stable process decisions
 
 - `0` — ALLOW
 - `10` — WARN / review
-- `20` — BLOCK / quarantine
+- `20` — BLOCK / quarantine / probe resource limit reached
 - `2` — invalid CLI or policy
-- `3` — scan failure
-
-Example:
-
-```bash
-attendantforge scan --json --policy config/attendantforge.conf.example "$UPLOAD"
-case $? in
-  0)  echo "allow" ;;
-  10) echo "warn/review" ;;
-  20) echo "block" ;;
-  *)  echo "scanner error; fail closed" ;;
-esac
-```
+- `3` — scan or probe infrastructure failure
 
 ## Defensive model
 
-ZIP analysis is metadata-first and does not normally inflate compressed members.
-PDF analysis is bounded to a 64 MiB static prefix, skips stream decoding and page
-rendering, and uses declared resource costs plus structural signals. Modern PDFs
-that use xref streams and object streams are recognized rather than treated as
-classic-xref failures.
+ZIP analysis is metadata-first and avoids arbitrary decompression. PDF analysis
+uses a bounded static prefix and does not decode streams or render pages. The
+v0.7 probe executes only these AttendantForge parsers in a resource-constrained
+child process, allowing actual scanner cost to be measured without handing the
+file to a general-purpose viewer or extractor.
 
 See:
 
 - [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) — ZIP bomb and PDF exhaustion model
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — scanner architecture
 - [`docs/POLICY.md`](docs/POLICY.md) — external policy files and profiles
+- [`docs/PROBE.md`](docs/PROBE.md) — isolated parser probe and resource ceilings
 - [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — upload/download gateway pattern
 
 ## Safety scope

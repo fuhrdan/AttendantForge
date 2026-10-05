@@ -1,4 +1,5 @@
 #include "attendantforge.h"
+#include "probe.h"
 #include "policy.h"
 
 #include <assert.h>
@@ -126,8 +127,20 @@ static int write_policy(const char *path)
     return 0;
 }
 
+
+static void test_probe_defaults(void)
+{
+    AfProbeLimits limits;
+    af_probe_default_limits(&limits);
+    assert(limits.memory_bytes == 256ull * 1024ull * 1024ull);
+    assert(limits.cpu_seconds == 2u);
+    assert(limits.timeout_ms == 3000u);
+    assert(strcmp(af_probe_status_name(AF_PROBE_OK), "OK") == 0);
+    assert(strcmp(af_probe_status_name(AF_PROBE_LIMIT_HIT), "LIMIT_HIT") == 0);
+}
 int main(void)
 {
+    test_probe_defaults();
     const unsigned char zip_header[] = {'P','K',3,4,0};
     const unsigned char pdf_header[] = {'%','P','D','F','-','1','.','7'};
     const unsigned char unknown[] = {'N','O','P','E'};
@@ -222,6 +235,6 @@ int main(void)
     assert(policy.warn_score == 40 && policy.block_score == 65);
     remove("af_policy.conf");
 
-    puts("All AttendantForge v0.6 tests passed.");
+    puts("All AttendantForge v0.7 tests passed.");
     return 0;
 }
