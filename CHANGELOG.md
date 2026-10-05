@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Added JSON reports for automation and upload pipelines.
+- Added stable exit codes for allow/warn/block and scanner failures.
+- Added configurable warning/block thresholds and strict policy mode.
+- Added PDF indirect-reference and unresolved-reference accounting.
+- Added `startxref` range and classic-xref target validation.
+- Expanded bounded PDF regression fixtures and documentation.
+
+
 ## 0.4.0
 
 - Added bounded PDF static resource analysis.

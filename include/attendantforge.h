@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AF_VERSION "0.4.0"
+#define AF_VERSION "0.5.0"
 #define AF_MAX_NESTED_DEPTH 3u
 #define AF_MAX_NESTED_ARCHIVES 64u
 
@@ -63,7 +63,12 @@ typedef struct
     unsigned int maximum_filter_chain;
     unsigned int maximum_structure_depth;
     unsigned int xref_section_count;
+    uint64_t indirect_reference_count;
+    uint64_t unresolved_reference_count;
+    uint64_t startxref_offset;
     int startxref_present;
+    int startxref_offset_valid;
+    int startxref_points_to_xref;
     int eof_marker_present;
     int analysis_truncated;
 } AfPdfMetrics;

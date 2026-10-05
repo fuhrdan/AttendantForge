@@ -58,6 +58,7 @@ static int write_single_entry_zip(const char *path, const char *name,
 
 static int write_pdf(const char *path, int high_cost)
 {
+    long xref_offset;
     FILE *fp = fopen(path, "wb");
     if (fp == NULL) return -1;
     fputs("%PDF-1.7\n", fp);
@@ -76,8 +77,23 @@ static int write_pdf(const char *path, int high_cost)
         fputs("/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 4 /Filter /FlateDecode >>\n", fp);
     }
     fputs("stream\nABCD\nendstream\nendobj\n", fp);
+    xref_offset = ftell(fp);
     fputs("xref\n0 5\n0000000000 65535 f \n", fp);
-    fputs("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n", fp);
+    fputs("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n", fp);
+    fprintf(fp, "%ld\n%%%%EOF\n", xref_offset);
+    fclose(fp);
+    return 0;
+}
+
+static int write_broken_reference_pdf(const char *path)
+{
+    long xref_offset;
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) return -1;
+    fputs("%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 999 0 R >>\nendobj\n", fp);
+    xref_offset = ftell(fp);
+    fputs("xref\n0 2\n0000000000 65535 f \ntrailer\n<< /Size 2 /Root 1 0 R >>\nstartxref\n", fp);
+    fprintf(fp, "%ld\n%%%%EOF\n", xref_offset);
     fclose(fp);
     return 0;
 }
@@ -136,6 +152,9 @@ int main(void)
     assert(report.pdf.image_count == 1);
     assert(report.pdf.maximum_declared_pixels == 10000);
     assert(report.pdf.startxref_present == 1);
+    assert(report.pdf.startxref_offset_valid == 1);
+    assert(report.pdf.startxref_points_to_xref == 1);
+    assert(report.pdf.unresolved_reference_count == 0);
     assert(report.pdf.eof_marker_present == 1);
     assert(report.score < 30);
     remove("af_normal.pdf");
@@ -149,6 +168,13 @@ int main(void)
     assert(report.score >= 80);
     remove("af_pressure.pdf");
 
-    puts("All AttendantForge v0.4 tests passed.");
+    assert(write_broken_reference_pdf("af_broken_ref.pdf") == 0);
+    assert(af_scan_file("af_broken_ref.pdf", &report) == 0);
+    assert(report.pdf.indirect_reference_count >= 2);
+    assert(report.pdf.unresolved_reference_count >= 1);
+    assert(report.score >= 5);
+    remove("af_broken_ref.pdf");
+
+    puts("All AttendantForge v0.5 tests passed.");
     return 0;
 }
