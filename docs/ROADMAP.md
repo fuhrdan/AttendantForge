@@ -1,60 +1,33 @@
 # Roadmap
 
-## v0.1 - Foundation — complete
-- CLI scanner
-- ZIP/PDF signature detection
-- common risk model
-- tests and CI
-- defensive threat-model documentation
+## v0.1 — Foundation
+- CLI
+- signature detection
+- common risk levels
 
-## v0.2 - ZIP metadata analyzer — complete
-- End of Central Directory discovery
-- central-directory parsing and bounds checks
-- entry count
-- compressed/uncompressed totals
-- per-entry and aggregate expansion ratios
-- ZIP-specific scoring
-- bounded metadata-only regression fixtures
+## v0.2 — ZIP metadata cost model
+- central-directory parsing
+- expansion ratios
+- declared expanded size
+- entry-count scoring
 
-## v0.3 - ZIP resource analysis
-- bounded nested-archive inspection
-- recursion accounting
-- path anomaly detection
-- extraction budget recommendations
-- ZIP64 accounting
+## v0.3 — Container hardening (current)
+- ZIP64 single-disk accounting
+- nested archive candidate detection
+- bounded stored-nested ZIP confirmation
+- parent traversal and absolute-path detection
+- recommended disk / memory budgets
+- expanded regression tests
 
-## v0.4 - PDF structure analyzer
-- header/version
-- indirect object enumeration
-- xref/trailer discovery
-- stream/filter inventory
+## v0.4 — PDF structural analyzer
+- header/version and EOF consistency
+- xref/object enumeration
+- stream/filter-chain inventory
+- image dimensions and pixel-cost estimates
+- object/reference depth heuristics
 
-## v0.5 - PDF stream analysis
-- bounded stream decoding
-- decoded-byte accounting
-- filter-chain scoring
-
-## v0.6 - PDF render-cost heuristics
-- image dimensions and pixel budget
-- structural depth
-- repeated resource references
-- embedded content inventory
-
-## v0.7 - Unified scoring
-- disk, memory, CPU, and structural pressure dimensions
-- weighted risk score
-
-## v0.8 - Machine-readable output
+## v0.5+
 - JSON output
-- stable exit codes
-- integration API
-
-## v0.9 - Test corpus and CI hardening
-- bounded adversarial fixtures
-- fuzz harness
-- regression corpus
-
-## v1.0
-- polished Windows/Linux CLI
-- documentation and examples
-- stable scoring semantics
+- policy files
+- optional sandbox probe with OS-enforced CPU/RAM/disk limits
+- additional container/image formats

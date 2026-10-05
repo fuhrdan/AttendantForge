@@ -26,23 +26,29 @@ static void print_report(const AfReport *report)
     {
         printf("\nZIP resource metadata\n");
         printf("---------------------\n");
-        printf("Entries:                 %llu\n", (unsigned long long)report->zip.entry_count);
-        printf("Compressed payload:      %.2f MiB\n", to_mib(report->zip.total_compressed_size));
-        printf("Declared expanded data:  %.2f MiB\n", to_mib(report->zip.total_uncompressed_size));
-        printf("Aggregate ratio:         %.2fx\n", report->zip.aggregate_ratio);
-        printf("Maximum entry ratio:     %.2fx\n", report->zip.maximum_entry_ratio);
-        printf("Largest entry expanded:  %.2f MiB\n", to_mib(report->zip.largest_uncompressed_size));
-        printf("Central directory:       %s\n", report->zip.central_directory_valid ? "VALID" : "UNVERIFIED");
+        printf("Entries:                    %llu\n", (unsigned long long)report->zip.entry_count);
+        printf("Compressed payload:         %.2f MiB\n", to_mib(report->zip.total_compressed_size));
+        printf("Declared expanded data:     %.2f MiB\n", to_mib(report->zip.total_uncompressed_size));
+        printf("Aggregate ratio:            %.2fx\n", report->zip.aggregate_ratio);
+        printf("Maximum entry ratio:        %.2fx\n", report->zip.maximum_entry_ratio);
+        printf("Largest entry expanded:     %.2f MiB\n", to_mib(report->zip.largest_uncompressed_size));
+        printf("Nested archive candidates:  %llu\n", (unsigned long long)report->zip.nested_archive_candidates);
+        printf("Nested archives confirmed:  %llu\n", (unsigned long long)report->zip.nested_archives_inspected);
+        printf("Maximum inspected depth:    %u\n", report->zip.maximum_nested_depth);
+        printf("Traversal paths:            %llu\n", (unsigned long long)report->zip.path_traversal_count);
+        printf("Absolute paths:             %llu\n", (unsigned long long)report->zip.absolute_path_count);
+        printf("Recommended disk budget:    %.2f MiB\n", to_mib(report->zip.recommended_disk_budget));
+        printf("Recommended memory budget:  %.2f MiB\n", to_mib(report->zip.recommended_memory_budget));
+        printf("Central directory:          %s\n", report->zip.central_directory_valid ? "VALID" : "UNVERIFIED");
         if (report->zip.zip64_detected)
         {
-            printf("ZIP64:                   DETECTED (partial support)\n");
+            printf("ZIP64:                      %s\n", report->zip.zip64_valid ? "VALIDATED" : "DETECTED / UNVERIFIED");
         }
     }
 
     printf("\nRisk score:  %u / 100\n", report->score);
     printf("Risk level:  %s\n", af_risk_name(report->level));
     printf("Notes:       %s\n", report->notes[0] ? report->notes : "None");
-
     if (report->type == AF_TYPE_PDF)
     {
         printf("\nPDF deep analysis begins in v0.4.\n");
@@ -53,26 +59,22 @@ int main(int argc, char **argv)
 {
     AfReport report;
     int rc;
-
     if (argc == 2 && strcmp(argv[1], "--version") == 0)
     {
         printf("%s\n", AF_VERSION);
         return 0;
     }
-
     if (argc != 3 || strcmp(argv[1], "scan") != 0)
     {
         print_usage(argv[0]);
         return 1;
     }
-
     rc = af_scan_file(argv[2], &report);
     if (rc != 0)
     {
         fprintf(stderr, "Unable to scan '%s' (error %d).\n", argv[2], rc);
         return 2;
     }
-
     print_report(&report);
     return 0;
 }
