@@ -80,17 +80,28 @@ static int parse_uint_range(const char *text, unsigned int min_value, unsigned i
     return 1;
 }
 
-static const char *decision_name(unsigned int score, const AfPolicy *policy)
+static int format_policy_block(const AfReport *report, const AfPolicy *policy)
 {
-    if (score >= policy->block_score) return "BLOCK";
-    if (score >= policy->warn_score) return "WARN";
+    if (report == NULL || policy == NULL) return 0;
+    if (report->type == AF_TYPE_GZIP && policy->max_gzip_ratio > 0.0 && report->gzip.expansion_ratio > policy->max_gzip_ratio) return 1;
+    if (report->type == AF_TYPE_TAR && policy->max_tar_entries > 0ull && report->tar.entry_count > policy->max_tar_entries) return 1;
+    if ((report->type == AF_TYPE_PNG || report->type == AF_TYPE_JPEG) && policy->max_image_pixels > 0ull && report->image.pixel_count > policy->max_image_pixels) return 1;
+    return 0;
+}
+
+static const char *decision_name(const AfReport *report, const AfPolicy *policy)
+{
+    if (format_policy_block(report, policy)) return "BLOCK";
+    if (report->score >= policy->block_score) return "BLOCK";
+    if (report->score >= policy->warn_score) return "WARN";
     return "ALLOW";
 }
 
-static int decision_exit_code(unsigned int score, const AfPolicy *policy)
+static int decision_exit_code(const AfReport *report, const AfPolicy *policy)
 {
-    if (score >= policy->block_score) return AF_EXIT_BLOCK;
-    if (score >= policy->warn_score) return AF_EXIT_WARN;
+    if (format_policy_block(report, policy)) return AF_EXIT_BLOCK;
+    if (report->score >= policy->block_score) return AF_EXIT_BLOCK;
+    if (report->score >= policy->warn_score) return AF_EXIT_WARN;
     return AF_EXIT_ALLOW;
 }
 
@@ -128,8 +139,9 @@ static void print_json_report(const AfReport *report, const AfPolicy *policy, co
     printf("  \"risk\": {\"score\": %u, \"level\": \"%s\"},\n", report->score, af_risk_name(report->level));
     printf("  \"policy\": {\"profile\": "); json_string(policy->profile);
     printf(", \"policy_file\": "); json_string(policy->policy_file);
-    printf(", \"warn_score\": %u, \"block_score\": %u, \"strict\": %s, \"decision\": \"%s\"},\n",
-           policy->warn_score, policy->block_score, policy->strict ? "true" : "false", decision_name(report->score, policy));
+    printf(", \"warn_score\": %u, \"block_score\": %u, \"strict\": %s, \"max_gzip_ratio\": %.3f, \"max_tar_entries\": %llu, \"max_image_pixels\": %llu, \"decision\": \"%s\"},\n",
+           policy->warn_score, policy->block_score, policy->strict ? "true" : "false", policy->max_gzip_ratio,
+           policy->max_tar_entries, policy->max_image_pixels, decision_name(report, policy));
 
     if (report->type == AF_TYPE_ZIP)
     {
@@ -180,6 +192,36 @@ static void print_json_report(const AfReport *report, const AfPolicy *policy, co
         printf("    \"recommended_memory_budget_bytes\": %llu\n", (unsigned long long)report->pdf.recommended_memory_budget);
         printf("  },\n");
     }
+    else if (report->type == AF_TYPE_GZIP)
+    {
+        printf("  \"gzip\": {\n");
+        printf("    \"compressed_bytes\": %llu,\n", (unsigned long long)report->gzip.compressed_bytes);
+        printf("    \"declared_uncompressed_bytes\": %llu,\n", (unsigned long long)report->gzip.declared_uncompressed_bytes);
+        printf("    \"expansion_ratio\": %.6f,\n", report->gzip.expansion_ratio);
+        printf("    \"isize_wrap_possible\": %s\n", report->gzip.isize_wrap_possible ? "true" : "false");
+        printf("  },\n");
+    }
+    else if (report->type == AF_TYPE_TAR)
+    {
+        printf("  \"tar\": {\n");
+        printf("    \"entry_count\": %llu,\n", (unsigned long long)report->tar.entry_count);
+        printf("    \"declared_bytes\": %llu,\n", (unsigned long long)report->tar.total_declared_bytes);
+        printf("    \"largest_entry_bytes\": %llu,\n", (unsigned long long)report->tar.largest_entry_bytes);
+        printf("    \"path_traversal_count\": %llu,\n", (unsigned long long)report->tar.path_traversal_count);
+        printf("    \"absolute_path_count\": %llu,\n", (unsigned long long)report->tar.absolute_path_count);
+        printf("    \"declared_to_file_ratio\": %.6f\n", report->tar.declared_to_file_ratio);
+        printf("  },\n");
+    }
+    else if (report->type == AF_TYPE_PNG || report->type == AF_TYPE_JPEG)
+    {
+        printf("  \"image\": {\n");
+        printf("    \"width\": %llu, \"height\": %llu,\n", (unsigned long long)report->image.width, (unsigned long long)report->image.height);
+        printf("    \"pixel_count\": %llu,\n", (unsigned long long)report->image.pixel_count);
+        printf("    \"estimated_decoded_bytes\": %llu,\n", (unsigned long long)report->image.estimated_decoded_bytes);
+        printf("    \"decoded_to_file_ratio\": %.6f\n", report->image.decoded_to_file_ratio);
+        printf("  },\n");
+    }
+
     if (probe != NULL && limits != NULL)
     {
         double memory_ratio = probe->predicted_memory_budget_bytes > 0 ? (double)probe->peak_memory_bytes / (double)probe->predicted_memory_budget_bytes : 0.0;
@@ -240,6 +282,31 @@ static void print_text_report(const AfReport *report, const AfPolicy *policy, co
         printf("Recommended memory budget:   %.2f MiB\n", to_mib(report->pdf.recommended_memory_budget));
     }
 
+    else if (report->type == AF_TYPE_GZIP)
+    {
+        printf("\nGZIP resource metadata\n----------------------\n");
+        printf("Declared expanded bytes:   %.2f MiB\n", to_mib(report->gzip.declared_uncompressed_bytes));
+        printf("Expansion ratio:           %.2fx\n", report->gzip.expansion_ratio);
+        printf("ISIZE wrap possible:       %s\n", report->gzip.isize_wrap_possible ? "YES" : "NO");
+    }
+    else if (report->type == AF_TYPE_TAR)
+    {
+        printf("\nTAR resource metadata\n---------------------\n");
+        printf("Entries:                   %llu\n", (unsigned long long)report->tar.entry_count);
+        printf("Declared content:          %.2f MiB\n", to_mib(report->tar.total_declared_bytes));
+        printf("Largest entry:             %.2f MiB\n", to_mib(report->tar.largest_entry_bytes));
+        printf("Traversal paths:           %llu\n", (unsigned long long)report->tar.path_traversal_count);
+        printf("Absolute paths:            %llu\n", (unsigned long long)report->tar.absolute_path_count);
+    }
+    else if (report->type == AF_TYPE_PNG || report->type == AF_TYPE_JPEG)
+    {
+        printf("\nImage resource metadata\n-----------------------\n");
+        printf("Dimensions:                %llu x %llu\n", (unsigned long long)report->image.width, (unsigned long long)report->image.height);
+        printf("Pixel count:               %llu\n", (unsigned long long)report->image.pixel_count);
+        printf("Estimated decoded memory:  %.2f MiB\n", to_mib(report->image.estimated_decoded_bytes));
+        printf("Decoded/file ratio:        %.2fx\n", report->image.decoded_to_file_ratio);
+    }
+
     if (probe != NULL && limits != NULL)
     {
         printf("\nIsolated parser probe\n---------------------\n");
@@ -254,9 +321,10 @@ static void print_text_report(const AfReport *report, const AfPolicy *policy, co
 
     printf("\nRisk score:  %u / 100\n", report->score);
     printf("Risk level:  %s\n", af_risk_name(report->level));
-    printf("Policy:      %s (profile %s, warn >= %u, block >= %u%s)\n", decision_name(report->score, policy),
+    printf("Policy:      %s (profile %s, warn >= %u, block >= %u%s)\n", decision_name(report, policy),
            policy->profile, policy->warn_score, policy->block_score, policy->strict ? ", strict" : "");
     if (policy->policy_file[0] != '\0') printf("Policy file: %s\n", policy->policy_file);
+    printf("Format caps:  gzip %.0fx, tar %llu entries, image %llu pixels\n", policy->max_gzip_ratio, policy->max_tar_entries, policy->max_image_pixels);
     printf("Notes:       %s\n", report->notes[0] ? report->notes : "None");
 }
 
@@ -418,5 +486,5 @@ int main(int argc, char **argv)
         if (probe_result.status == AF_PROBE_LIMIT_HIT || probe_result.status == AF_PROBE_TIMEOUT) return AF_EXIT_BLOCK;
         if (probe_result.status == AF_PROBE_ERROR || probe_result.status == AF_PROBE_UNSUPPORTED) return AF_EXIT_SCAN_ERROR;
     }
-    return decision_exit_code(report.score, &policy);
+    return decision_exit_code(&report, &policy);
 }

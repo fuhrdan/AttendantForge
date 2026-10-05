@@ -54,6 +54,9 @@ void af_policy_defaults(AfPolicy *policy)
     memset(policy, 0, sizeof(*policy));
     policy->warn_score = 60u;
     policy->block_score = 80u;
+    policy->max_gzip_ratio = 500.0;
+    policy->max_tar_entries = 100000ull;
+    policy->max_image_pixels = 250000000ull;
     snprintf(policy->profile, sizeof(policy->profile), "%s", "desktop");
 }
 
@@ -64,19 +67,25 @@ int af_policy_apply_profile(AfPolicy *policy, const char *name, char *error, siz
     {
         policy->warn_score = 60u;
         policy->block_score = 80u;
+    policy->max_gzip_ratio = 500.0;
+    policy->max_tar_entries = 100000ull;
+    policy->max_image_pixels = 250000000ull;
         policy->strict = 0;
+        policy->max_gzip_ratio = 500.0; policy->max_tar_entries = 100000ull; policy->max_image_pixels = 250000000ull;
     }
     else if (strcmp(name, "upload-server") == 0)
     {
         policy->warn_score = 45u;
         policy->block_score = 70u;
         policy->strict = 0;
+        policy->max_gzip_ratio = 250.0; policy->max_tar_entries = 50000ull; policy->max_image_pixels = 150000000ull;
     }
     else if (strcmp(name, "high-security") == 0)
     {
         policy->warn_score = 30u;
         policy->block_score = 60u;
         policy->strict = 1;
+        policy->max_gzip_ratio = 100.0; policy->max_tar_entries = 10000ull; policy->max_image_pixels = 80000000ull;
     }
     else
     {
@@ -101,6 +110,21 @@ int af_policy_validate(const AfPolicy *policy, char *error, size_t error_size)
         return -1;
     }
     return 0;
+}
+
+static int parse_u64(const char *text, unsigned long long *value)
+{
+    char *end = NULL; unsigned long long parsed; errno = 0; parsed = strtoull(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') return 0;
+    *value = parsed;
+    return 1;
+}
+static int parse_double_positive(const char *text, double *value)
+{
+    char *end = NULL; double parsed; errno = 0; parsed = strtod(text, &end);
+    if (errno != 0 || end == text || *end != '\0' || parsed < 0.0) return 0;
+    *value = parsed;
+    return 1;
 }
 
 int af_policy_load_file(AfPolicy *policy, const char *path, char *error, size_t error_size)
@@ -149,6 +173,18 @@ int af_policy_load_file(AfPolicy *policy, const char *path, char *error, size_t 
         else if (strcmp(key, "strict") == 0)
         {
             if (!parse_bool(value, &policy->strict)) { set_error(error, error_size, "invalid strict value"); fclose(fp); return -1; }
+        }
+        else if (strcmp(key, "max_gzip_ratio") == 0)
+        {
+            if (!parse_double_positive(value, &policy->max_gzip_ratio)) { set_error(error, error_size, "invalid max_gzip_ratio"); fclose(fp); return -1; }
+        }
+        else if (strcmp(key, "max_tar_entries") == 0)
+        {
+            if (!parse_u64(value, &policy->max_tar_entries)) { set_error(error, error_size, "invalid max_tar_entries"); fclose(fp); return -1; }
+        }
+        else if (strcmp(key, "max_image_pixels") == 0)
+        {
+            if (!parse_u64(value, &policy->max_image_pixels)) { set_error(error, error_size, "invalid max_image_pixels"); fclose(fp); return -1; }
         }
         else
         {

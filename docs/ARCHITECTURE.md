@@ -125,3 +125,21 @@ untrusted file
 
 The worker is intentionally not a generic command runner. This avoids turning a
 preflight scanner into a launcher for potentially vulnerable desktop handlers.
+
+## v0.8 format router
+
+```text
+signature probe
+    |
+    +-- ZIP  -> central-directory analyzer
+    +-- PDF  -> bounded structural analyzer
+    +-- GZIP -> header/trailer estimator
+    +-- TAR  -> 512-byte header walker
+    +-- PNG  -> IHDR pixel estimator
+    +-- JPEG -> marker/SOF pixel estimator
+    |
+    v
+shared score + per-format admission policy
+```
+
+All new v0.8 analyzers are metadata-first and avoid full decompression/rendering.

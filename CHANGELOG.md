@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.8.0
+
+### Added
+- Metadata-first GZIP analyzer using header/trailer information and expansion-ratio estimates.
+- Bounded TAR header walker with entry counts, declared sizes, link/path safety signals, and malformed-header detection.
+- PNG IHDR analyzer with decoded pixel/memory estimation.
+- JPEG marker/SOF analyzer with decoded pixel/memory estimation.
+- Per-format policy ceilings: `max_gzip_ratio`, `max_tar_entries`, and `max_image_pixels`.
+- Format-ceiling enforcement that can block independently of the generic risk score.
+- JSON/text metrics for GZIP, TAR, PNG, and JPEG.
+- `docs/FORMATS.md` and bounded regression fixtures for each new format.
+
+### Changed
+- Version updated to 0.8.0 across builds, CLI output, tests, and documentation.
+- AttendantForge now describes itself as a general-purpose file resource-cost admission layer rather than only a ZIP/PDF assessor.
+
+### Safety
+- GZIP content is not inflated during static analysis.
+- TAR payloads are skipped rather than copied/extracted.
+- PNG IDAT and JPEG entropy-coded image data are not decoded.
+- Existing constrained probe continues to run only AttendantForge's own parsers.
+
+
 ## v0.7.0
 
 ### Added

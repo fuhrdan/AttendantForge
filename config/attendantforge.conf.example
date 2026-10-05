@@ -6,3 +6,8 @@ profile=upload-server
 warn_score=45
 block_score=70
 strict=false
+
+# v0.8 per-format admission ceilings
+max_gzip_ratio=500
+max_tar_entries=100000
+max_image_pixels=250000000

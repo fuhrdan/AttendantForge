@@ -156,3 +156,11 @@ The resulting score estimates **resource pressure**, not malicious intent. A leg
 ## Pipeline policy
 
 A scanner finding is not automatically a malware verdict. v0.7 exposes profiles, policy files, and explicit thresholds so an upload/download gateway can choose its own operational posture. The default desktop profile uses WARN at 60 and BLOCK at 80; upload-server and high-security profiles tighten those thresholds. Stable exit codes let a caller enforce the decision without scraping human-readable output.
+
+## v0.8: generalized resource amplification
+
+Resource exhaustion is not unique to ZIP or PDF. A small GZIP file can represent
+much more output than its stored size, a TAR can contain an excessive number of
+members or unsafe paths, and a compressed image can request a very large decoded
+pixel buffer. v0.8 therefore generalizes the model to **stored size versus
+processing footprint** while keeping static inspection bounded.

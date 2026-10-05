@@ -43,3 +43,17 @@ keys are rejected rather than silently ignored. Scores must be 0–100 and
 
 `strict=true` ensures the effective block threshold is no higher than 60 unless
 an explicit command-line `--block-score` override is supplied.
+
+## v0.8 format ceilings
+
+Policies may also set explicit format admission ceilings:
+
+```text
+max_gzip_ratio=250
+max_tar_entries=50000
+max_image_pixels=150000000
+```
+
+These are hard admission rules. A file exceeding one of these configured limits
+is reported as `BLOCK` even if its generic risk score remains below `block_score`.
+Use `0` to disable a particular ceiling.

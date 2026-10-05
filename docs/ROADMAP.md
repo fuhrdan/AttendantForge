@@ -14,22 +14,21 @@
 
 ## v0.5 — Pipeline integration
 - JSON output, stable exit codes, configurable thresholds, strict mode
-- indirect-reference inventory and classic `startxref` validation
 
 ## v0.6 — Policy + modern PDF structures
-- external policy files and named profiles
-- xref/object-stream and incremental-update awareness
-- upload-gateway integration example
+- external policies/profiles, xref/object streams, upload-gateway example
 
-## v0.7 — Constrained dynamic probe (current)
-- opt-in isolated AttendantForge parser worker
-- hard memory/CPU/elapsed-time ceilings
-- Linux/Unix rlimits and Windows Job Objects
-- measured-vs-predicted parser resource reporting
-- fail-closed limit/timeout behavior
+## v0.7 — Constrained dynamic probe
+- isolated parser worker with hard RAM/CPU/elapsed-time ceilings
 
-## v0.8+
-- additional archive/container/image formats
-- per-format policy controls and allowlists
-- richer metrics/telemetry output for fleet deployment
+## v0.8 — General file-admission formats (current)
+- metadata-first GZIP and TAR analyzers
+- PNG and JPEG decoded-pixel/memory estimators
+- per-format admission ceilings in policy profiles/files
+- unified JSON/text reporting and regression fixtures
+
+## v0.9+
+- richer telemetry and batch/directory scanning
+- format allow/deny lists and MIME/signature mismatch reporting
+- additional containers/images where metadata-first analysis is reliable
 - optional disposable-sandbox adapters for selected external parsers/renderers

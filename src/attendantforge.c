@@ -1,6 +1,7 @@
 #include "attendantforge.h"
 #include "pdf_analyzer.h"
 #include "zip_analyzer.h"
+#include "format_analyzer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +31,9 @@ AfFileType af_detect_type(const unsigned char *header, size_t len)
         (header[2] == 3 || header[2] == 5 || header[2] == 7) &&
         (header[3] == 4 || header[3] == 6 || header[3] == 8)) return AF_TYPE_ZIP;
     if (len >= 5 && memcmp(header, "%PDF-", 5) == 0) return AF_TYPE_PDF;
+    if (len >= 2 && header[0] == 0x1f && header[1] == 0x8b) return AF_TYPE_GZIP;
+    if (len >= 8 && memcmp(header, "\x89PNG\r\n\x1a\n", 8) == 0) return AF_TYPE_PNG;
+    if (len >= 3 && header[0] == 0xff && header[1] == 0xd8 && header[2] == 0xff) return AF_TYPE_JPEG;
     return AF_TYPE_UNKNOWN;
 }
 
@@ -39,6 +43,10 @@ const char *af_type_name(AfFileType type)
     {
         case AF_TYPE_ZIP: return "ZIP";
         case AF_TYPE_PDF: return "PDF";
+        case AF_TYPE_GZIP: return "GZIP";
+        case AF_TYPE_TAR: return "TAR";
+        case AF_TYPE_PNG: return "PNG";
+        case AF_TYPE_JPEG: return "JPEG";
         default: return "UNKNOWN";
     }
 }
@@ -79,6 +87,11 @@ int af_scan_file(const char *path, AfReport *report)
     report->file_size = get_file_size(fp);
     read_count = fread(header, 1, sizeof(header), fp);
     report->type = af_detect_type(header, read_count);
+    if (report->type == AF_TYPE_UNKNOWN && report->file_size >= 512)
+    {
+        unsigned char magic[5];
+        if (fseek(fp, 257, SEEK_SET) == 0 && fread(magic,1,5,fp)==5 && memcmp(magic,"ustar",5)==0) report->type = AF_TYPE_TAR;
+    }
 
     if (report->file_size > (uint64_t)1024 * 1024 * 1024)
     {
@@ -100,6 +113,26 @@ int af_scan_file(const char *path, AfReport *report)
     {
         int pdf_rc = af_analyze_pdf(fp, report->file_size, &report->pdf, report->notes, sizeof(report->notes));
         score += pdf_rc == 0 ? af_score_pdf(&report->pdf, report->file_size, report->notes, sizeof(report->notes)) : 25;
+    }
+    else if (report->type == AF_TYPE_GZIP)
+    {
+        int x = af_analyze_gzip(fp, report->file_size, &report->gzip, report->notes, sizeof(report->notes));
+        score += x == 0 ? af_score_gzip(&report->gzip, report->notes, sizeof(report->notes)) : 25;
+    }
+    else if (report->type == AF_TYPE_TAR)
+    {
+        int x = af_analyze_tar(fp, report->file_size, &report->tar, report->notes, sizeof(report->notes));
+        score += x == 0 ? af_score_tar(&report->tar, report->notes, sizeof(report->notes)) : 25;
+    }
+    else if (report->type == AF_TYPE_PNG)
+    {
+        int x = af_analyze_png(fp, report->file_size, &report->image, report->notes, sizeof(report->notes));
+        score += x == 0 ? af_score_image(&report->image, report->file_size, report->notes, sizeof(report->notes)) : 25;
+    }
+    else if (report->type == AF_TYPE_JPEG)
+    {
+        int x = af_analyze_jpeg(fp, report->file_size, &report->image, report->notes, sizeof(report->notes));
+        score += x == 0 ? af_score_image(&report->image, report->file_size, report->notes, sizeof(report->notes)) : 25;
     }
     else
     {

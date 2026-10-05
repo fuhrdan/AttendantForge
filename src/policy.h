@@ -8,6 +8,9 @@ typedef struct
     unsigned int warn_score;
     unsigned int block_score;
     int strict;
+    double max_gzip_ratio;
+    unsigned long long max_tar_entries;
+    unsigned long long max_image_pixels;
     char profile[32];
     char policy_file[512];
 } AfPolicy;

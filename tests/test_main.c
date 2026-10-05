@@ -128,6 +128,54 @@ static int write_policy(const char *path)
 }
 
 
+static int write_gzip_metadata_fixture(const char *path, unsigned long declared_size)
+{
+    unsigned char h[10] = {0x1f,0x8b,8,0,0,0,0,0,0,3};
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) return -1;
+    fwrite(h,1,10,fp);
+    fputc(0,fp); fputc(0,fp);
+    put_u32_le(fp, 0);
+    put_u32_le(fp, declared_size);
+    fclose(fp);
+    return 0;
+}
+
+static int write_tar_fixture(const char *path, const char *name, unsigned long size)
+{
+    unsigned char h[512] = {0};
+    char oct[16];
+    FILE *fp = fopen(path, "wb");
+    unsigned long padded, i;
+    if (fp == NULL) return -1;
+    snprintf((char*)h, 100, "%s", name);
+    snprintf(oct, sizeof(oct), "%011lo", size);
+    memcpy(h+124, oct, 11); h[135] = '\0';
+    h[156] = '0'; memcpy(h+257,"ustar",5);
+    fwrite(h,1,512,fp);
+    padded = (size + 511ul) & ~511ul;
+    for (i=0;i<padded;i++) fputc(0,fp);
+    memset(h,0,sizeof(h)); fwrite(h,1,512,fp); fwrite(h,1,512,fp);
+    fclose(fp); return 0;
+}
+
+static int write_png_fixture(const char *path, unsigned long w, unsigned long hgt)
+{
+    unsigned char b[29] = {0x89,'P','N','G','\r','\n',0x1a,'\n',0,0,0,13,'I','H','D','R'};
+    FILE *fp = fopen(path,"wb"); if(!fp) return -1;
+    b[16]=(w>>24)&255; b[17]=(w>>16)&255; b[18]=(w>>8)&255; b[19]=w&255;
+    b[20]=(hgt>>24)&255; b[21]=(hgt>>16)&255; b[22]=(hgt>>8)&255; b[23]=hgt&255;
+    b[24]=8; b[25]=6; fwrite(b,1,sizeof(b),fp); fclose(fp); return 0;
+}
+
+static int write_jpeg_fixture(const char *path, unsigned int w, unsigned int hgt)
+{
+    unsigned char b[] = {0xff,0xd8,0xff,0xc0,0x00,0x11,8,0,0,0,0,3,1,0x11,0,2,0x11,0,3,0x11,0,0xff,0xd9};
+    FILE *fp=fopen(path,"wb"); if(!fp) return -1;
+    b[7]=(hgt>>8)&255; b[8]=hgt&255; b[9]=(w>>8)&255; b[10]=w&255;
+    fwrite(b,1,sizeof(b),fp); fclose(fp); return 0;
+}
+
 static void test_probe_defaults(void)
 {
     AfProbeLimits limits;
@@ -144,6 +192,9 @@ int main(void)
     const unsigned char zip_header[] = {'P','K',3,4,0};
     const unsigned char pdf_header[] = {'%','P','D','F','-','1','.','7'};
     const unsigned char unknown[] = {'N','O','P','E'};
+    const unsigned char gz_header[] = {0x1f,0x8b,8,0};
+    const unsigned char png_header[] = {0x89,'P','N','G','\r','\n',0x1a,'\n'};
+    const unsigned char jpg_header[] = {0xff,0xd8,0xff,0xe0};
     const unsigned char nested_sig[] = {'P','K',3,4};
     AfReport report;
     AfPolicy policy;
@@ -152,6 +203,9 @@ int main(void)
     assert(af_detect_type(zip_header, sizeof(zip_header)) == AF_TYPE_ZIP);
     assert(af_detect_type(pdf_header, sizeof(pdf_header)) == AF_TYPE_PDF);
     assert(af_detect_type(unknown, sizeof(unknown)) == AF_TYPE_UNKNOWN);
+    assert(af_detect_type(gz_header, sizeof(gz_header)) == AF_TYPE_GZIP);
+    assert(af_detect_type(png_header, sizeof(png_header)) == AF_TYPE_PNG);
+    assert(af_detect_type(jpg_header, sizeof(jpg_header)) == AF_TYPE_JPEG);
     assert(af_score_to_level(0) == AF_RISK_LOW);
     assert(af_score_to_level(30) == AF_RISK_MEDIUM);
     assert(af_score_to_level(60) == AF_RISK_HIGH);
@@ -225,6 +279,38 @@ int main(void)
     assert(report.pdf.startxref_points_to_xref_stream == 1);
     remove("af_xref_stream.pdf");
 
+    assert(write_gzip_metadata_fixture("af_ratio.gz", 1000000ul) == 0);
+    assert(af_scan_file("af_ratio.gz", &report) == 0);
+    assert(report.type == AF_TYPE_GZIP);
+    assert(report.gzip.declared_uncompressed_bytes == 1000000ul);
+    assert(report.gzip.expansion_ratio > 1000.0);
+    remove("af_ratio.gz");
+
+    assert(write_tar_fixture("af_safe.tar", "sample.txt", 32) == 0);
+    assert(af_scan_file("af_safe.tar", &report) == 0);
+    assert(report.type == AF_TYPE_TAR);
+    assert(report.tar.entry_count == 1);
+    assert(report.tar.total_declared_bytes == 32);
+    remove("af_safe.tar");
+
+    assert(write_tar_fixture("af_traversal.tar", "../escape.txt", 1) == 0);
+    assert(af_scan_file("af_traversal.tar", &report) == 0);
+    assert(report.tar.path_traversal_count == 1);
+    remove("af_traversal.tar");
+
+    assert(write_png_fixture("af_large.png", 30000, 20000) == 0);
+    assert(af_scan_file("af_large.png", &report) == 0);
+    assert(report.type == AF_TYPE_PNG);
+    assert(report.image.pixel_count == 600000000ull);
+    assert(report.score >= 60);
+    remove("af_large.png");
+
+    assert(write_jpeg_fixture("af_image.jpg", 4000, 3000) == 0);
+    assert(af_scan_file("af_image.jpg", &report) == 0);
+    assert(report.type == AF_TYPE_JPEG);
+    assert(report.image.pixel_count == 12000000ull);
+    remove("af_image.jpg");
+
     af_policy_defaults(&policy);
     assert(strcmp(policy.profile, "desktop") == 0);
     assert(af_policy_apply_profile(&policy, "high-security", policy_error, sizeof(policy_error)) == 0);
@@ -235,6 +321,6 @@ int main(void)
     assert(policy.warn_score == 40 && policy.block_score == 65);
     remove("af_policy.conf");
 
-    puts("All AttendantForge v0.7 tests passed.");
+    puts("All AttendantForge v0.8 tests passed.");
     return 0;
 }

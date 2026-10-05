@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AF_VERSION "0.7.0"
+#define AF_VERSION "0.8.0"
 #define AF_MAX_NESTED_DEPTH 3u
 #define AF_MAX_NESTED_ARCHIVES 64u
 
@@ -12,7 +12,11 @@ typedef enum
 {
     AF_TYPE_UNKNOWN = 0,
     AF_TYPE_ZIP,
-    AF_TYPE_PDF
+    AF_TYPE_PDF,
+    AF_TYPE_GZIP,
+    AF_TYPE_TAR,
+    AF_TYPE_PNG,
+    AF_TYPE_JPEG
 } AfFileType;
 
 typedef enum
@@ -78,6 +82,42 @@ typedef struct
     int analysis_truncated;
 } AfPdfMetrics;
 
+
+typedef struct
+{
+    uint64_t compressed_bytes;
+    uint64_t declared_uncompressed_bytes;
+    uint32_t trailer_isize;
+    unsigned int compression_method;
+    unsigned int flags;
+    double expansion_ratio;
+    int isize_wrap_possible;
+} AfGzipMetrics;
+
+typedef struct
+{
+    uint64_t entry_count;
+    uint64_t total_declared_bytes;
+    uint64_t largest_entry_bytes;
+    uint64_t link_entry_count;
+    uint64_t path_traversal_count;
+    uint64_t absolute_path_count;
+    uint64_t malformed_headers;
+    double declared_to_file_ratio;
+} AfTarMetrics;
+
+typedef struct
+{
+    uint64_t width;
+    uint64_t height;
+    uint64_t pixel_count;
+    uint64_t estimated_decoded_bytes;
+    unsigned int bit_depth;
+    unsigned int color_type;
+    unsigned int components;
+    double decoded_to_file_ratio;
+} AfImageMetrics;
+
 typedef struct
 {
     const char *path;
@@ -87,6 +127,9 @@ typedef struct
     AfRiskLevel level;
     AfZipMetrics zip;
     AfPdfMetrics pdf;
+    AfGzipMetrics gzip;
+    AfTarMetrics tar;
+    AfImageMetrics image;
     char notes[2048];
 } AfReport;
 
