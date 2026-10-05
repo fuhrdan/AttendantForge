@@ -1,24 +1,25 @@
 CC ?= cc
-CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2 -Iinclude
-BUILD_DIR := build
-SRC := src/main.c src/attendantforge.c
-TEST_SRC := tests/test_main.c src/attendantforge.c
+CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
+CPPFLAGS ?= -Iinclude -Isrc
+BUILD := build-make
 
-.PHONY: all clean test
+CORE := src/attendantforge.c src/zip_analyzer.c
 
-all: $(BUILD_DIR)/attendantforge
+.PHONY: all test clean
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+all: $(BUILD)/attendantforge
 
-$(BUILD_DIR)/attendantforge: $(SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(SRC) -o $@
+$(BUILD):
+	mkdir -p $(BUILD)
 
-$(BUILD_DIR)/test_attendantforge: $(TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(TEST_SRC) -o $@
+$(BUILD)/attendantforge: $(CORE) src/main.c | $(BUILD)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(CORE) src/main.c -o $@
 
-test: $(BUILD_DIR)/test_attendantforge
-	./$(BUILD_DIR)/test_attendantforge
+$(BUILD)/attendantforge_tests: $(CORE) tests/test_main.c | $(BUILD)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(CORE) tests/test_main.c -o $@
+
+test: $(BUILD)/attendantforge_tests
+	./$(BUILD)/attendantforge_tests
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD) build

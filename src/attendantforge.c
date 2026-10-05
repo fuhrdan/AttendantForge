@@ -1,4 +1,5 @@
 #include "attendantforge.h"
+#include "zip_analyzer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -6,6 +7,7 @@
 static uint64_t get_file_size(FILE *fp)
 {
     long end;
+
     if (fseek(fp, 0, SEEK_END) != 0)
     {
         return 0;
@@ -23,6 +25,24 @@ static uint64_t get_file_size(FILE *fp)
     }
 
     return (uint64_t)end;
+}
+
+static void append_note(char *notes, size_t notes_size, const char *text)
+{
+    size_t used;
+
+    if (notes == NULL || notes_size == 0 || text == NULL)
+    {
+        return;
+    }
+
+    used = strlen(notes);
+    if (used >= notes_size - 1)
+    {
+        return;
+    }
+
+    strncat(notes, text, notes_size - used - 1);
 }
 
 AfFileType af_detect_type(const unsigned char *header, size_t len)
@@ -117,35 +137,49 @@ int af_scan_file(const char *path, AfReport *report)
 
     report->file_size = get_file_size(fp);
     read_count = fread(header, 1, sizeof(header), fp);
-    fclose(fp);
-
     report->type = af_detect_type(header, read_count);
 
-    /* v0.1 deliberately uses only coarse, static signals.
-       Format-specific resource modeling begins in v0.2/v0.4. */
     if (report->file_size > (uint64_t)1024 * 1024 * 1024)
     {
         score += 30;
-        strncat(report->notes, "Very large input file. ", sizeof(report->notes) - strlen(report->notes) - 1);
+        append_note(report->notes, sizeof(report->notes), "Very large input file. ");
     }
     else if (report->file_size > (uint64_t)100 * 1024 * 1024)
     {
         score += 15;
-        strncat(report->notes, "Large input file. ", sizeof(report->notes) - strlen(report->notes) - 1);
+        append_note(report->notes, sizeof(report->notes), "Large input file. ");
     }
 
-    if (report->type == AF_TYPE_UNKNOWN)
+    if (report->type == AF_TYPE_ZIP)
     {
-        score += 10;
-        strncat(report->notes, "Unrecognized or unsupported signature. ", sizeof(report->notes) - strlen(report->notes) - 1);
+        int zip_rc = af_analyze_zip(fp, report->file_size, &report->zip, report->notes, sizeof(report->notes));
+        if (zip_rc == 0)
+        {
+            score += af_score_zip(&report->zip, report->notes, sizeof(report->notes));
+        }
+        else
+        {
+            score += 25;
+        }
+    }
+    else if (report->type == AF_TYPE_PDF)
+    {
+        append_note(report->notes, sizeof(report->notes), "PDF recognized; deep PDF analysis begins in v0.4. ");
     }
     else
     {
-        strncat(report->notes, "Recognized format; deep analysis not enabled in v0.1. ", sizeof(report->notes) - strlen(report->notes) - 1);
+        score += 10;
+        append_note(report->notes, sizeof(report->notes), "Unrecognized or unsupported signature. ");
+    }
+
+    fclose(fp);
+
+    if (score > 100)
+    {
+        score = 100;
     }
 
     report->score = score;
     report->level = af_score_to_level(score);
-
     return 0;
 }

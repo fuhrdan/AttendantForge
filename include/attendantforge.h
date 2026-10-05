@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AF_VERSION "0.1.0"
+#define AF_VERSION "0.2.0"
 
 typedef enum
 {
@@ -23,12 +23,26 @@ typedef enum
 
 typedef struct
 {
+    uint64_t entry_count;
+    uint64_t total_compressed_size;
+    uint64_t total_uncompressed_size;
+    uint64_t largest_compressed_size;
+    uint64_t largest_uncompressed_size;
+    double aggregate_ratio;
+    double maximum_entry_ratio;
+    int central_directory_valid;
+    int zip64_detected;
+} AfZipMetrics;
+
+typedef struct
+{
     const char *path;
     uint64_t file_size;
     AfFileType type;
     unsigned int score;
     AfRiskLevel level;
-    char notes[512];
+    AfZipMetrics zip;
+    char notes[768];
 } AfReport;
 
 int af_scan_file(const char *path, AfReport *report);

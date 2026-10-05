@@ -1,50 +1,44 @@
 # Architecture
 
+## v0.2 data flow
+
 ```text
-                    ATTENDANTFORGE
-                          |
-                   +------+------+
-                   | File Probe  |
-                   +------+------+
-                          |
-                    signature + size
-                          |
-                          v
-                    FORMAT ROUTER
-                          |
-                 +--------+--------+
-                 |                 |
-                ZIP               PDF
-              (v0.2+)           (v0.4+)
-                 |                 |
-                 +--------+--------+
-                          |
-                          v
-                   RESOURCE MODEL
-                          |
-                +---------+---------+
-                |         |         |
-               RAM       CPU       DISK
-                |         |         |
-                +---------+---------+
-                          |
-                          v
-                     RISK ENGINE
-                          |
-                          v
-                  LOW / MED / HIGH
+file path
+   |
+   v
+signature detection
+   |
+   +--------------------------+
+   |                          |
+ ZIP                        PDF/other
+   |                          |
+   v                          v
+EOCD search               coarse scan
+   |
+   v
+central-directory bounds validation
+   |
+   v
+iterate central-directory entries
+   |
+   +--> compressed size
+   +--> declared uncompressed size
+   +--> entry count
+   +--> ratio metrics
+   |
+   v
+ZIP risk scoring
+   |
+   v
+common AfReport
 ```
 
-## v0.1 responsibilities
+The ZIP analyzer intentionally reads metadata only. It does not invoke a decompressor and does not write extracted data to disk.
 
-Version 0.1 intentionally establishes only the safe foundation:
+## Trust boundaries
 
-1. CLI command surface.
-2. File signature recognition for ZIP and PDF.
-3. Common report structure.
-4. Common 0-100 risk score and severity mapping.
-5. Coarse input-size checks.
-6. Unit tests and CI.
-7. Threat-model documentation.
+All sizes, counts, offsets, and lengths read from an untrusted archive are treated as untrusted. Before seeking or advancing a cursor, AttendantForge checks the values against the physical file size and the declared central-directory bounds.
 
-Format-specific decompression and object-graph analysis are deliberately separated into later milestones.
+## Current ZIP64 behavior
+
+ZIP64 uses larger size/count fields and extra records. v0.2 detects sentinel values that indicate ZIP64 and reports the archive as only partially assessed. Full ZIP64 accounting is planned for v0.3.

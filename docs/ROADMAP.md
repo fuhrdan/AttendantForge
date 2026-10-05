@@ -1,23 +1,27 @@
 # Roadmap
 
-## v0.1 - Foundation
+## v0.1 - Foundation — complete
 - CLI scanner
 - ZIP/PDF signature detection
 - common risk model
 - tests and CI
 - defensive threat-model documentation
 
-## v0.2 - ZIP metadata analyzer
-- central-directory parsing
+## v0.2 - ZIP metadata analyzer — complete
+- End of Central Directory discovery
+- central-directory parsing and bounds checks
 - entry count
 - compressed/uncompressed totals
 - per-entry and aggregate expansion ratios
+- ZIP-specific scoring
+- bounded metadata-only regression fixtures
 
 ## v0.3 - ZIP resource analysis
 - bounded nested-archive inspection
 - recursion accounting
 - path anomaly detection
 - extraction budget recommendations
+- ZIP64 accounting
 
 ## v0.4 - PDF structure analyzer
 - header/version

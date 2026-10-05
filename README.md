@@ -6,9 +6,25 @@ AttendantForge is a defensive C utility designed to answer a question traditiona
 
 > **How much computational work might this file ask the machine to perform compared with how small the file looks?**
 
-Version **0.1.0** establishes the project foundation: a cross-platform CLI, ZIP/PDF signature detection, a common resource-risk model, tests, CI, and documentation describing the resource-exhaustion threats the project is intended to defend against.
+Version **0.2.0** adds a real ZIP central-directory analyzer. It reads archive metadata **without extracting members** and reports entry count, compressed and declared uncompressed totals, aggregate expansion ratio, worst per-entry ratio, and a bounded resource-risk score.
 
 > AttendantForge is not an antivirus engine and does not claim a file is malware-free or safe to open.
+
+## What v0.2 adds
+
+- ZIP End of Central Directory discovery
+- central-directory validation
+- entry counting
+- total compressed payload size
+- total declared uncompressed size
+- aggregate expansion ratio
+- maximum per-entry expansion ratio
+- largest declared expanded member
+- ZIP-specific risk scoring
+- malformed/unsupported metadata warnings
+- bounded metadata-only test fixtures
+
+No archive contents are extracted during the v0.2 scan.
 
 ## Why this exists
 
@@ -18,9 +34,9 @@ A ZIP may be small on disk yet represent a much larger extracted data set. A PDF
 
 AttendantForge treats these as **resource-accounting problems** rather than merely signature-detection problems.
 
-See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for diagrams and a defensive description of both attack classes.
+See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for diagrams and defensive descriptions of both attack classes.
 
-## v0.1 architecture
+## v0.2 architecture
 
 ```text
 untrusted file
@@ -28,14 +44,25 @@ untrusted file
       v
 signature probe
       |
-      v
-ZIP / PDF / unknown
+      +-------------------+
+      |                   |
+      v                   v
+     ZIP                  PDF
+      |                   |
+      v                   v
+EOCD locator        signature only
       |
       v
-common resource-risk report
+central directory
+      |
+      +--> entry count
+      +--> compressed bytes
+      +--> declared expanded bytes
+      +--> expansion ratios
+      |
+      v
+resource-risk score
 ```
-
-Later releases add format-aware analyzers behind this interface.
 
 ## Build
 
@@ -57,27 +84,47 @@ make test
 ## Usage
 
 ```bash
-./build/attendantforge scan suspicious.pdf
 ./build/attendantforge scan archive.zip
+./build/attendantforge scan suspicious.pdf
 ./build/attendantforge --version
 ```
 
-Example v0.1 output:
+Example:
 
 ```text
-AttendantForge v0.1.0
+AttendantForge v0.2.0
 
-File:        example.pdf
-Type:        PDF
-Size:        0.42 MiB
-Risk score:  0 / 100
-Risk level:  LOW
-Notes:       Recognized format; deep analysis not enabled in v0.1.
+File:        archive.zip
+Type:        ZIP
+Size:        1.82 MiB
 
-PDF deep analysis begins in v0.4.
+ZIP resource metadata
+---------------------
+Entries:                 8412
+Compressed payload:      1.64 MiB
+Declared expanded data:  2710.00 MiB
+Aggregate ratio:         1652.44x
+Maximum entry ratio:     2190.12x
+Largest entry expanded:  63.00 MiB
+Central directory:       VALID
+
+Risk score:  82 / 100
+Risk level:  CRITICAL
+Notes:       ZIP central directory parsed without extracting file contents. Extreme aggregate expansion ratio. ...
 ```
 
-The low score in v0.1 means only that no coarse v0.1 signal fired. It is **not** a safety verdict.
+## Important limitations
+
+v0.2 deliberately stays metadata-first. It does **not**:
+
+- extract ZIP members;
+- recursively inspect nested archives;
+- fully account for ZIP64 archives;
+- validate CRCs or decompressed content;
+- inspect file paths for traversal anomalies;
+- perform deep PDF analysis.
+
+Those are later roadmap items. A LOW score is therefore a resource-risk observation based on the features currently implemented, not a guarantee of safety.
 
 ## Risk levels
 
@@ -88,11 +135,11 @@ The low score in v0.1 means only that no coarse v0.1 signal fired. It is **not**
 | 60-79 | HIGH |
 | 80-100 | CRITICAL |
 
-Format-specific scoring begins with the ZIP analyzer in v0.2.
+Current ZIP scoring considers aggregate expansion ratio, worst per-entry ratio, declared expanded size, and entry count.
 
 ## Safety model
 
-The project intentionally uses bounded fixtures and static analysis. It does not ship generators for destructive ZIP bombs or PDFs intended to consume unbounded resources.
+The project uses bounded fixtures and static metadata analysis. It does not ship generators for destructive ZIP bombs or PDFs intended to consume unbounded resources.
 
 See [`SECURITY.md`](SECURITY.md).
 
@@ -108,7 +155,9 @@ AttendantForge/
 ├── include/attendantforge.h
 ├── src/
 │   ├── attendantforge.c
-│   └── main.c
+│   ├── main.c
+│   ├── zip_analyzer.c
+│   └── zip_analyzer.h
 ├── tests/test_main.c
 ├── CMakeLists.txt
 ├── Makefile
@@ -120,8 +169,6 @@ AttendantForge/
 ## Design principle
 
 > **The file does not get to choose the machine's resource ceiling.**
-
-AttendantForge aims to make that ceiling visible before another parser, extractor, or renderer is allowed to consume the file.
 
 ## License
 

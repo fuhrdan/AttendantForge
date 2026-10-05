@@ -10,23 +10,40 @@ static void print_usage(const char *exe)
     printf("       %s --version\n", exe);
 }
 
+static double to_mib(uint64_t bytes)
+{
+    return (double)bytes / (1024.0 * 1024.0);
+}
+
 static void print_report(const AfReport *report)
 {
-    double mib = (double)report->file_size / (1024.0 * 1024.0);
-
     printf("AttendantForge v%s\n\n", AF_VERSION);
     printf("File:        %s\n", report->path);
     printf("Type:        %s\n", af_type_name(report->type));
-    printf("Size:        %.2f MiB\n", mib);
-    printf("Risk score:  %u / 100\n", report->score);
-    printf("Risk level:  %s\n", af_risk_name(report->level));
-    printf("Notes:       %s\n", report->notes[0] ? report->notes : "None");
+    printf("Size:        %.2f MiB\n", to_mib(report->file_size));
 
     if (report->type == AF_TYPE_ZIP)
     {
-        printf("\nZIP deep analysis begins in v0.2.\n");
+        printf("\nZIP resource metadata\n");
+        printf("---------------------\n");
+        printf("Entries:                 %llu\n", (unsigned long long)report->zip.entry_count);
+        printf("Compressed payload:      %.2f MiB\n", to_mib(report->zip.total_compressed_size));
+        printf("Declared expanded data:  %.2f MiB\n", to_mib(report->zip.total_uncompressed_size));
+        printf("Aggregate ratio:         %.2fx\n", report->zip.aggregate_ratio);
+        printf("Maximum entry ratio:     %.2fx\n", report->zip.maximum_entry_ratio);
+        printf("Largest entry expanded:  %.2f MiB\n", to_mib(report->zip.largest_uncompressed_size));
+        printf("Central directory:       %s\n", report->zip.central_directory_valid ? "VALID" : "UNVERIFIED");
+        if (report->zip.zip64_detected)
+        {
+            printf("ZIP64:                   DETECTED (partial support)\n");
+        }
     }
-    else if (report->type == AF_TYPE_PDF)
+
+    printf("\nRisk score:  %u / 100\n", report->score);
+    printf("Risk level:  %s\n", af_risk_name(report->level));
+    printf("Notes:       %s\n", report->notes[0] ? report->notes : "None");
+
+    if (report->type == AF_TYPE_PDF)
     {
         printf("\nPDF deep analysis begins in v0.4.\n");
     }

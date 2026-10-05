@@ -105,11 +105,11 @@ AttendantForge's long-term model is to score **estimated resource pressure**, no
 
 ## Out of scope
 
-AttendantForge v0.1 does not:
+AttendantForge v0.2 does not:
 
 - execute embedded scripts;
 - render PDFs;
-- extract ZIP contents;
+- extract ZIP contents (v0.2 analyzes ZIP central-directory metadata only);
 - create archive bombs or destructive PDF samples;
 - determine whether a document contains malware;
 - guarantee that a file is safe to open.
