@@ -4,7 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AF_VERSION "0.9.0"
+#define AF_VERSION "1.0.0"
+#define AF_TELEMETRY_SCHEMA "1.0"
+#define AF_CLI_CONTRACT "1.0"
 #define AF_MAX_NESTED_DEPTH 3u
 #define AF_MAX_NESTED_ARCHIVES 64u
 

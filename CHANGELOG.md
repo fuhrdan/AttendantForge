@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.9.0
+## 1.0.0 — Stable release
+
+- Declares CLI contract `1.0` for `scan`, `probe`, `batch`, exit codes, policy precedence, and detected-format semantics.
+- Declares telemetry schema `1.0` for single-file JSON and batch NDJSON/CSV.
+- Adds schema/contract identifiers to machine-readable output.
+- Adds CMake install rules for the executable, policies, documentation, license, and security guidance.
+- Expands GitHub Actions CI to Ubuntu, Windows, and macOS with install smoke testing.
+- Adds `scripts/release-check.py` for dependency-free source-release hygiene checks.
+- Adds API contract, audit telemetry, release/install, and support documentation.
+- Treats ZIP/PDF/GZIP/TAR/PNG/JPEG analyzers, policy profiles, directory scanning, and constrained probing as the first stable feature set.
+
+## 1.0.0
 
 - Added recursive `batch` directory/quarantine scanning.
 - Added NDJSON and CSV telemetry output.

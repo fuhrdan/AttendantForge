@@ -142,6 +142,7 @@ static void print_json_report(const AfReport *report, const AfPolicy *policy, co
 {
     printf("{\n");
     printf("  \"tool\": \"AttendantForge\",\n  \"version\": \"%s\",\n", AF_VERSION);
+    printf("  \"telemetry_schema\": \"%s\",\n  \"cli_contract\": \"%s\",\n", AF_TELEMETRY_SCHEMA, AF_CLI_CONTRACT);
     printf("  \"file\": "); json_string(report->path); printf(",\n");
     printf("  \"type\": \"%s\",\n", af_type_name(report->type));
     printf("  \"file_size_bytes\": %llu,\n", (unsigned long long)report->file_size);

@@ -2,6 +2,9 @@
 #include "probe.h"
 #include "policy.h"
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -188,6 +191,9 @@ static void test_probe_defaults(void)
 }
 int main(void)
 {
+    assert(strcmp(AF_VERSION, "1.0.0") == 0);
+    assert(strcmp(AF_TELEMETRY_SCHEMA, "1.0") == 0);
+    assert(strcmp(AF_CLI_CONTRACT, "1.0") == 0);
     test_probe_defaults();
     const unsigned char zip_header[] = {'P','K',3,4,0};
     const unsigned char pdf_header[] = {'%','P','D','F','-','1','.','7'};
@@ -336,6 +342,6 @@ int main(void)
     assert(af_policy_format_allowed(&policy, AF_TYPE_PDF) == 0);
     assert(af_policy_format_allowed(&policy, AF_TYPE_ZIP) == 1);
 
-    puts("All AttendantForge v0.9 tests passed.");
+    puts("All AttendantForge v1.0.0 tests passed.");
     return 0;
 }
